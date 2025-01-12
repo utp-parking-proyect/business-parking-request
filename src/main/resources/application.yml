@@ -3,7 +3,7 @@ spring:
     name: business-parking-request
   r2dbc:
     url: r2dbc:mariadb://localhost:${DB_MARIADB_PORT}/db_utp_parking?serverTimezone=UTC
-    username: ${DB_MARIADB_USER}
+    username: ${DB_MARIADB_USERNAME}
     password: ${DB_MARIADB_PASSWORD}
   sql:
     init:
