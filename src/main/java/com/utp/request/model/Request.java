@@ -13,20 +13,20 @@ public class Request {
     @Column("id_request")
     private Integer idRequest;
 
-    @Column("fk_id_applicant")
+    @Column("id_applicant")
     private Integer idApplicant;
 
-    @Column("fk_id_acceptor")
+    @Column("id_acceptor")
     private Integer idAcceptor;
 
-    @Column("fk_vehicle_type")
-    private Integer vehicleType;
+    @Column("id_vehicle_type")
+    private Integer idVehicleType;
 
-    @Column("fk_vehicle_id")
-    private Integer vehicleId;
+    @Column("id_vehicle")
+    private Integer idVehicle;
 
-    @Column("fk_status_id")
-    private Integer statusId;
+    @Column("id_status")
+    private Integer idStatus;
 
     @Column("number_plate")
     private String numberPlate;
