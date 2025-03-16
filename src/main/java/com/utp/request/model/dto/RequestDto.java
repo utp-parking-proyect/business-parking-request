@@ -10,9 +10,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class RequestDto {
-    private String idApplicant;
+    private Integer idApplicant;
     private String vehicleType;
     private String numberPlate;
+    private Integer idCycle;
     private LocalDateTime dateRequest;
     private Integer idStatus;
     private Integer approved;

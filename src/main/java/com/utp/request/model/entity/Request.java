@@ -1,11 +1,13 @@
-package com.utp.request.model;
+package com.utp.request.model.entity;
 
+import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
+@Data
 @Table("requests")
 public class Request {
 
@@ -27,6 +29,9 @@ public class Request {
 
     @Column("id_status")
     private Integer idStatus;
+
+    @Column("id_cycle")
+    private Integer idCycle;
 
     @Column("number_plate")
     private String numberPlate;

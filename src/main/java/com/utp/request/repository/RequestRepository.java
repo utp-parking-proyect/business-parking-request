@@ -1,6 +1,6 @@
 package com.utp.request.repository;
 
-import com.utp.request.model.Request;
+import com.utp.request.model.entity.Request;
 import com.utp.request.model.dto.RequestDto;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
@@ -14,10 +14,11 @@ import java.time.LocalDateTime;
 public interface RequestRepository extends R2dbcRepository<Request, Integer> {
 
     @Query(value = """
-            INSERT INTO requests (id_applicant, id_vehicle_type, number_plate, date_request,
+            INSERT INTO requests (id_applicant, id_vehicle_type, id_cycle, number_plate, date_request,
                       is_new, id_status, approved)
             VALUES (:#{#request.idApplicant},
                     :#{#request.vehicleType},
+                    :#{#request.idCycle},
                     :#{#request.numberPlate},
                     :#{#request.dateRequest},
                     :#{#request.isNew},
@@ -34,4 +35,12 @@ public interface RequestRepository extends R2dbcRepository<Request, Integer> {
     Mono<Void> saveWorkflow(@Param("requestId") int requestId,
                             @Param("statusId") int statusId,
                             @Param("dateCreate") LocalDateTime dateCreate);
+
+    @Query(value = """
+            SELECT * FROM requests WHERE number_plate = :numberPlate;
+            """)
+    Mono<Request> findByNumberPlate(@Param("numberPlate") String numberPlate);
+
+    @Query("SELECT COUNT(*) FROM requests WHERE id_applicant = :idApplicant AND id_cycle = :idCycle")
+    Mono<Long> countByApplicantAndCycle(Integer idApplicant, Integer idCycle);
 }

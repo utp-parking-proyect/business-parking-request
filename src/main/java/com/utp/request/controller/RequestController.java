@@ -28,7 +28,10 @@ public class RequestController {
                     response.put("message", "Request registered successfully!");
                     return ResponseEntity.ok(response);
                 })
-                .defaultIfEmpty(ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of("message", "Request registration failed")));
+                .onErrorResume(IllegalArgumentException.class, e -> {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("message", e.getMessage());
+                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response));
+                });
     }
 }
