@@ -1,11 +1,13 @@
-package com.utp.request.model;
+package com.utp.request.model.entity;
 
+import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
+@Data
 @Table("requests")
 public class Request {
 
@@ -13,20 +15,23 @@ public class Request {
     @Column("id_request")
     private Integer idRequest;
 
-    @Column("fk_id_applicant")
+    @Column("id_applicant")
     private Integer idApplicant;
 
-    @Column("fk_id_acceptor")
+    @Column("id_acceptor")
     private Integer idAcceptor;
 
-    @Column("fk_vehicle_type")
-    private Integer vehicleType;
+    @Column("id_vehicle_type")
+    private Integer idVehicleType;
 
-    @Column("fk_vehicle_id")
-    private Integer vehicleId;
+    @Column("id_vehicle")
+    private Integer idVehicle;
 
-    @Column("fk_status_id")
-    private Integer statusId;
+    @Column("id_status")
+    private Integer idStatus;
+
+    @Column("id_cycle")
+    private Integer idCycle;
 
     @Column("number_plate")
     private String numberPlate;
