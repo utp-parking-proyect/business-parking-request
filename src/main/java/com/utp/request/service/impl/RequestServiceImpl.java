@@ -1,5 +1,6 @@
 package com.utp.request.service.impl;
 
+import com.utp.request.model.entity.Cycle;
 import com.utp.request.model.entity.Request;
 import com.utp.request.model.dto.RequestDto;
 import com.utp.request.repository.CycleRepository;
@@ -8,7 +9,6 @@ import com.utp.request.service.RequestService;
 import com.utp.request.util.Constants;
 import com.utp.request.util.CycleUtil;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import static com.utp.request.util.Constants.ERROR_ALREADY_APPROVED;
 import static com.utp.request.util.Constants.ERROR_MAX_REQUESTS_REACHED;
 import static com.utp.request.util.Constants.ERROR_NO_RESPONSE_YET;
+import static com.utp.request.util.Constants.ID_STATUS_IN_REVISION;
 
 @Service
 @Slf4j
@@ -27,19 +28,61 @@ public class RequestServiceImpl implements RequestService {
     private final RequestRepository requestRepository;
     private final CycleRepository cycleRepository;
 
+    private Mono<Cycle> getCycle() {
+        return cycleRepository.getCycleByNameCycle(CycleUtil.determineCycle());
+    }
+
     private Mono<String> validateRequest(String numberPlate) {
         log.info("Validating request for number plate: {}", numberPlate);
         return requestRepository.findByNumberPlate(numberPlate)
             .flatMap(request -> {
                 if (request.getDateResponse() == null) {
+                    logError(ERROR_NO_RESPONSE_YET);
                     return Mono.just(ERROR_NO_RESPONSE_YET);
                 }
                 if (request.getApproved()) {
+                    logError(ERROR_ALREADY_APPROVED);
                     return Mono.just(ERROR_ALREADY_APPROVED);
                 }
+                log.info("Number plate {} is valid", numberPlate);
                 return Mono.just("VALID");
             })
             .defaultIfEmpty("VALID");
+    }
+
+    private Mono<Void> checkRequestCount(Integer idApplicant, Integer idCycle) {
+        return requestRepository.countByApplicantAndCycle(idApplicant, idCycle)
+            .flatMap(count -> {
+                if (count >= 2) {
+                    logError(ERROR_MAX_REQUESTS_REACHED);
+                    return Mono.error(new IllegalArgumentException(ERROR_MAX_REQUESTS_REACHED));
+                }
+                return Mono.empty();
+            });
+    }
+
+    private Mono<Request> saveRequestAndWorkflow(RequestDto request, Integer cycleId) {
+        request.setIdCycle(cycleId);
+        request.setDateRequest(LocalDateTime.now());
+        request.setApproved(Constants.ID_STATUS_NOT_APPROVED);
+        request.setIdStatus(Constants.ID_STATUS_REGISTERED);
+        return requestRepository.saveNewRequest(request)
+            .flatMap(requestId -> requestRepository.selectWorkflowBefore(request.getNumberPlate())
+                .flatMap(workflowId -> requestRepository.updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
+                .then(requestRepository.saveWorkflow(requestId, Constants.ID_STATUS_REGISTERED, LocalDateTime.now()))
+                .then(requestRepository.findById(requestId)));
+    }
+
+    private Mono<Void> updateAcceptorAndSaveWorkflow(Integer requestId, Integer idAcceptor) {
+        return requestRepository.updateAcceptorInRequest(requestId, idAcceptor)
+            .then(requestRepository.findById(requestId)
+                .flatMap(request -> requestRepository.selectWorkflowBefore(request.getNumberPlate()))
+                .flatMap(workflowId -> requestRepository.updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
+                .then(requestRepository.saveWorkflow(requestId, ID_STATUS_IN_REVISION, LocalDateTime.now())));
+    }
+
+    private void logError(String message) {
+        log.error("[ERROR] {}", message);
     }
 
     @Override
@@ -49,25 +92,12 @@ public class RequestServiceImpl implements RequestService {
                 if (!validationResult.equals("VALID")) {
                     return Mono.error(new IllegalArgumentException(validationResult));
                 }
-                String cycleName = CycleUtil.determineCycle();
-                return cycleRepository.getCycleByNameCycle(cycleName)
-                    .flatMap(cycle -> requestRepository.countByApplicantAndCycle(request.getIdApplicant(),
-                                    cycle.getIdCycle())
-                        .flatMap(count -> {
-                            if (count >= 2) {
-                                return Mono.error(new IllegalArgumentException(ERROR_MAX_REQUESTS_REACHED));
-                            }
-                            request.setIdCycle(cycle.getIdCycle());
-                            request.setDateRequest(LocalDateTime.now());
-                            request.setApproved(Constants.ID_STATUS_NOT_APPROVED);
-                            request.setIdStatus(Constants.ID_STATUS_REGISTERED);
-                            return requestRepository.saveNewRequest(request)
-                                .flatMap(requestId -> requestRepository.saveWorkflow(
-                                            requestId,
-                                            Constants.ID_STATUS_REGISTERED,
-                                            LocalDateTime.now())
-                                        .then(requestRepository.findById(requestId)));
-                        }));
+                return getCycle()
+                    .flatMap(cycle -> checkRequestCount(request.getIdApplicant(), cycle.getIdCycle())
+                        .then(saveRequestAndWorkflow(request, cycle.getIdCycle()))
+                        .flatMap(savedRequest -> requestRepository.getAcceptorWithFewerRequests()
+                            .flatMap(idAcceptor -> updateAcceptorAndSaveWorkflow(savedRequest.getIdRequest(), idAcceptor))
+                            .thenReturn(savedRequest)));
             });
     }
 }

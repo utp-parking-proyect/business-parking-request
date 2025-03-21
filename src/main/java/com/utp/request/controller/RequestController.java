@@ -16,6 +16,7 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
+@RequestMapping("/request-service")
 public class RequestController {
 
     private final RequestService requestService;
@@ -23,15 +24,15 @@ public class RequestController {
     @PostMapping
     public Mono<ResponseEntity<Map<String, Object>>> saveNewRequest(@RequestBody RequestDto request) {
         return requestService.saveNewRequest(request)
-                .map(savedRequest -> {
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("message", "Request registered successfully!");
-                    return ResponseEntity.ok(response);
-                })
-                .onErrorResume(IllegalArgumentException.class, e -> {
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("message", e.getMessage());
-                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response));
-                });
+            .map(savedRequest -> {
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Request registered successfully!");
+                return ResponseEntity.ok(response);
+            })
+            .onErrorResume(IllegalArgumentException.class, e -> {
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", e.getMessage());
+                return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response));
+            });
     }
 }
