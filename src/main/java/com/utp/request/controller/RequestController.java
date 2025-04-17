@@ -16,7 +16,7 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/request-service")
+@RequestMapping("/request")
 public class RequestController {
 
     private final RequestService requestService;
