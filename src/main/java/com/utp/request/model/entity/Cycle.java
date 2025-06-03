@@ -8,10 +8,10 @@ import org.springframework.data.relational.core.mapping.Table;
 @Data
 @Table("cycles")
 public class Cycle {
-    @Id
-    @Column("id_cycle")
-    private Integer idCycle;
+  @Id
+  @Column("id_cycle")
+  private Integer idCycle;
 
-    @Column("name_cycle")
-    private String nameCycle;
+  @Column("name_cycle")
+  private String nameCycle;
 }
