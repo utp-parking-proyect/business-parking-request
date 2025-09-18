@@ -5,6 +5,7 @@ import com.utp.request.model.entity.Request;
 import com.utp.request.model.dto.RequestDto;
 import com.utp.request.repository.CycleRepository;
 import com.utp.request.repository.RequestRepository;
+import com.utp.request.repository.WorkflowRepository;
 import com.utp.request.service.RequestService;
 import com.utp.request.util.Constants;
 import com.utp.request.util.CycleUtil;
@@ -27,6 +28,7 @@ public class RequestServiceImpl implements RequestService {
 
   private final RequestRepository requestRepository;
   private final CycleRepository cycleRepository;
+  private final WorkflowRepository workflowRepository;
 
   @Override
   public Mono<Request> saveNewRequest(RequestDto request) {
@@ -84,10 +86,10 @@ public class RequestServiceImpl implements RequestService {
     request.setApproved(Constants.ID_STATUS_NOT_APPROVED);
     request.setIdStatus(Constants.ID_STATUS_REGISTERED);
     return requestRepository.saveNewRequest(request)
-        .flatMap(requestId -> requestRepository.selectWorkflowBefore(request.getNumberPlate())
-            .flatMap(workflowId -> requestRepository
+        .flatMap(requestId -> workflowRepository.selectWorkflowBefore(request.getNumberPlate())
+            .flatMap(workflowId -> workflowRepository
                 .updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
-            .then(requestRepository
+            .then(workflowRepository
                 .saveWorkflow(requestId, Constants.ID_STATUS_REGISTERED, LocalDateTime.now()))
             .then(requestRepository.findById(requestId)));
   }
@@ -95,10 +97,10 @@ public class RequestServiceImpl implements RequestService {
   private Mono<Void> updateAcceptorAndSaveWorkflow(Integer requestId, Integer idAcceptor) {
     return requestRepository.updateAcceptorInRequest(requestId, idAcceptor)
         .then(requestRepository.findById(requestId)
-            .flatMap(request -> requestRepository.selectWorkflowBefore(request.getNumberPlate()))
-            .flatMap(workflowId -> requestRepository
+            .flatMap(request -> workflowRepository.selectWorkflowBefore(request.getNumberPlate()))
+            .flatMap(workflowId -> workflowRepository
                 .updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
-            .then(requestRepository
+            .then(workflowRepository
                 .saveWorkflow(requestId, ID_STATUS_IN_REVISION, LocalDateTime.now())));
   }
 }
