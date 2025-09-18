@@ -5,6 +5,7 @@ import com.utp.request.model.entity.Request;
 import com.utp.request.model.dto.RequestDto;
 import com.utp.request.repository.CycleRepository;
 import com.utp.request.repository.RequestRepository;
+import com.utp.request.repository.WorkflowRepository;
 import com.utp.request.service.RequestService;
 import com.utp.request.util.Constants;
 import com.utp.request.util.CycleUtil;
@@ -25,79 +26,81 @@ import static com.utp.request.util.Constants.ID_STATUS_IN_REVISION;
 @RequiredArgsConstructor
 public class RequestServiceImpl implements RequestService {
 
-    private final RequestRepository requestRepository;
-    private final CycleRepository cycleRepository;
+  private final RequestRepository requestRepository;
+  private final CycleRepository cycleRepository;
+  private final WorkflowRepository workflowRepository;
 
-    private Mono<Cycle> getCycle() {
-        return cycleRepository.getCycleByNameCycle(CycleUtil.determineCycle());
-    }
+  @Override
+  public Mono<Request> saveNewRequest(RequestDto request) {
+    return validateRequest(request.getNumberPlate())
+        .flatMap(validationResult -> {
+          if (!validationResult.equals(Constants.PLATE_VALID)) {
+            return Mono.error(new IllegalArgumentException(validationResult));
+          }
+          return getCycle()
+              .flatMap(cycle -> checkRequestCount(request.getIdApplicant(), cycle.getIdCycle())
+                  .then(saveRequestAndWorkflow(request, cycle.getIdCycle()))
+                  .flatMap(savedRequest -> requestRepository.getAcceptorWithFewerRequests()
+                      .flatMap(idAcceptor -> updateAcceptorAndSaveWorkflow(savedRequest.getIdRequest(),
+                          idAcceptor))
+                      .thenReturn(savedRequest)));
+        });
+  }
 
-    private Mono<String> validateRequest(String numberPlate) {
-        log.info("Validating request for number plate: {}", numberPlate);
-        return requestRepository.findByNumberPlate(numberPlate)
-            .flatMap(request -> {
-                if (request.getDateResponse() == null) {
-                    logError(ERROR_NO_RESPONSE_YET);
-                    return Mono.just(ERROR_NO_RESPONSE_YET);
-                }
-                if (request.getApproved()) {
-                    logError(ERROR_ALREADY_APPROVED);
-                    return Mono.just(ERROR_ALREADY_APPROVED);
-                }
-                log.info("Number plate {} is valid", numberPlate);
-                return Mono.just("VALID");
-            })
-            .defaultIfEmpty("VALID");
-    }
+  private Mono<Cycle> getCycle() {
+    return cycleRepository.getCycleByNameCycle(CycleUtil.determineCycle());
+  }
 
-    private Mono<Void> checkRequestCount(Integer idApplicant, Integer idCycle) {
-        return requestRepository.countByApplicantAndCycle(idApplicant, idCycle)
-            .flatMap(count -> {
-                if (count >= 2) {
-                    logError(ERROR_MAX_REQUESTS_REACHED);
-                    return Mono.error(new IllegalArgumentException(ERROR_MAX_REQUESTS_REACHED));
-                }
-                return Mono.empty();
-            });
-    }
+  private Mono<String> validateRequest(String numberPlate) {
+    log.info("Validating request for number plate: {}", numberPlate);
+    return requestRepository.findByNumberPlate(numberPlate)
+        .flatMap(request -> {
+          if (request.getDateResponse() == null) {
+            log.error(ERROR_NO_RESPONSE_YET);
+            return Mono.just(ERROR_NO_RESPONSE_YET);
+          }
+          if (Boolean.TRUE.equals(request.getApproved())) {
+            log.error(ERROR_ALREADY_APPROVED);
+            return Mono.just(ERROR_ALREADY_APPROVED);
+          }
+          log.info("Number plate {} is valid", numberPlate);
+          return Mono.just(Constants.PLATE_VALID);
+        })
+        .defaultIfEmpty(Constants.PLATE_VALID);
+  }
 
-    private Mono<Request> saveRequestAndWorkflow(RequestDto request, Integer cycleId) {
-        request.setIdCycle(cycleId);
-        request.setDateRequest(LocalDateTime.now());
-        request.setApproved(Constants.ID_STATUS_NOT_APPROVED);
-        request.setIdStatus(Constants.ID_STATUS_REGISTERED);
-        return requestRepository.saveNewRequest(request)
-            .flatMap(requestId -> requestRepository.selectWorkflowBefore(request.getNumberPlate())
-                .flatMap(workflowId -> requestRepository.updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
-                .then(requestRepository.saveWorkflow(requestId, Constants.ID_STATUS_REGISTERED, LocalDateTime.now()))
-                .then(requestRepository.findById(requestId)));
-    }
+  private Mono<Void> checkRequestCount(Integer idApplicant, Integer idCycle) {
+    return requestRepository.countByApplicantAndCycle(idApplicant, idCycle)
+        .flatMap(count -> {
+          if (count >= 2) {
+            log.error(ERROR_MAX_REQUESTS_REACHED);
+            return Mono.error(new IllegalArgumentException(ERROR_MAX_REQUESTS_REACHED));
+          }
+          return Mono.empty();
+        });
+  }
 
-    private Mono<Void> updateAcceptorAndSaveWorkflow(Integer requestId, Integer idAcceptor) {
-        return requestRepository.updateAcceptorInRequest(requestId, idAcceptor)
-            .then(requestRepository.findById(requestId)
-                .flatMap(request -> requestRepository.selectWorkflowBefore(request.getNumberPlate()))
-                .flatMap(workflowId -> requestRepository.updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
-                .then(requestRepository.saveWorkflow(requestId, ID_STATUS_IN_REVISION, LocalDateTime.now())));
-    }
+  private Mono<Request> saveRequestAndWorkflow(RequestDto request, Integer cycleId) {
+    request.setIdCycle(cycleId);
+    request.setDateRequest(LocalDateTime.now());
+    request.setApproved(Constants.ID_STATUS_NOT_APPROVED);
+    request.setIdStatus(Constants.ID_STATUS_REGISTERED);
+    return requestRepository.saveNewRequest(request)
+        .flatMap(requestId -> workflowRepository.selectWorkflowBefore(request.getNumberPlate())
+            .flatMap(workflowId -> workflowRepository
+                .updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
+            .then(workflowRepository
+                .saveWorkflow(requestId, Constants.ID_STATUS_REGISTERED, LocalDateTime.now()))
+            .then(requestRepository.findById(requestId)));
+  }
 
-    private void logError(String message) {
-        log.error("[ERROR] {}", message);
-    }
-
-    @Override
-    public Mono<Request> saveNewRequest(RequestDto request) {
-        return validateRequest(request.getNumberPlate())
-            .flatMap(validationResult -> {
-                if (!validationResult.equals("VALID")) {
-                    return Mono.error(new IllegalArgumentException(validationResult));
-                }
-                return getCycle()
-                    .flatMap(cycle -> checkRequestCount(request.getIdApplicant(), cycle.getIdCycle())
-                        .then(saveRequestAndWorkflow(request, cycle.getIdCycle()))
-                        .flatMap(savedRequest -> requestRepository.getAcceptorWithFewerRequests()
-                            .flatMap(idAcceptor -> updateAcceptorAndSaveWorkflow(savedRequest.getIdRequest(), idAcceptor))
-                            .thenReturn(savedRequest)));
-            });
-    }
+  private Mono<Void> updateAcceptorAndSaveWorkflow(Integer requestId, Integer idAcceptor) {
+    return requestRepository.updateAcceptorInRequest(requestId, idAcceptor)
+        .then(requestRepository.findById(requestId)
+            .flatMap(request -> workflowRepository.selectWorkflowBefore(request.getNumberPlate()))
+            .flatMap(workflowId -> workflowRepository
+                .updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
+            .then(workflowRepository
+                .saveWorkflow(requestId, ID_STATUS_IN_REVISION, LocalDateTime.now())));
+  }
 }

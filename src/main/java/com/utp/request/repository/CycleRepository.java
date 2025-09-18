@@ -7,5 +7,5 @@ import reactor.core.publisher.Mono;
 
 @Repository
 public interface CycleRepository extends R2dbcRepository<Cycle, Integer> {
-    Mono<Cycle> getCycleByNameCycle(String nameCycle);
+  Mono<Cycle> getCycleByNameCycle(String nameCycle);
 }

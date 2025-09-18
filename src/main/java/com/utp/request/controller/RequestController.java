@@ -19,20 +19,20 @@ import java.util.Map;
 @RequestMapping("/request")
 public class RequestController {
 
-    private final RequestService requestService;
+  private final RequestService requestService;
 
-    @PostMapping
-    public Mono<ResponseEntity<Map<String, Object>>> saveNewRequest(@RequestBody RequestDto request) {
-        return requestService.saveNewRequest(request)
-            .map(savedRequest -> {
-                Map<String, Object> response = new HashMap<>();
-                response.put("message", "Request registered successfully!");
-                return ResponseEntity.ok(response);
-            })
-            .onErrorResume(IllegalArgumentException.class, e -> {
-                Map<String, Object> response = new HashMap<>();
-                response.put("message", e.getMessage());
-                return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response));
-            });
-    }
+  @PostMapping
+  public Mono<ResponseEntity<Map<String, Object>>> saveNewRequest(@RequestBody RequestDto request) {
+    return requestService.saveNewRequest(request)
+        .map(savedRequest -> {
+          Map<String, Object> response = new HashMap<>();
+          response.put("message", "Request registered successfully!");
+          return ResponseEntity.ok(response);
+        })
+        .onErrorResume(IllegalArgumentException.class, e -> {
+          Map<String, Object> response = new HashMap<>();
+          response.put("message", e.getMessage());
+          return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response));
+        });
+  }
 }
