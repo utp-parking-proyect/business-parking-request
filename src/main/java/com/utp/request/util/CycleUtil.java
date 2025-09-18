@@ -2,9 +2,13 @@ package com.utp.request.util;
 
 import java.time.LocalDate;
 
-public class CycleUtil {
-  public static String determineCycle() {
+public final class CycleUtil {
 
+  private CycleUtil() {
+    throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
+  }
+
+  public static String determineCycle() {
     LocalDate now = LocalDate.now();
     int year = now.getYear();
     int month = now.getMonthValue();

@@ -28,6 +28,23 @@ public class RequestServiceImpl implements RequestService {
   private final RequestRepository requestRepository;
   private final CycleRepository cycleRepository;
 
+  @Override
+  public Mono<Request> saveNewRequest(RequestDto request) {
+    return validateRequest(request.getNumberPlate())
+        .flatMap(validationResult -> {
+          if (!validationResult.equals(Constants.PLATE_VALID)) {
+            return Mono.error(new IllegalArgumentException(validationResult));
+          }
+          return getCycle()
+              .flatMap(cycle -> checkRequestCount(request.getIdApplicant(), cycle.getIdCycle())
+                  .then(saveRequestAndWorkflow(request, cycle.getIdCycle()))
+                  .flatMap(savedRequest -> requestRepository.getAcceptorWithFewerRequests()
+                      .flatMap(idAcceptor -> updateAcceptorAndSaveWorkflow(savedRequest.getIdRequest(),
+                          idAcceptor))
+                      .thenReturn(savedRequest)));
+        });
+  }
+
   private Mono<Cycle> getCycle() {
     return cycleRepository.getCycleByNameCycle(CycleUtil.determineCycle());
   }
@@ -37,24 +54,24 @@ public class RequestServiceImpl implements RequestService {
     return requestRepository.findByNumberPlate(numberPlate)
         .flatMap(request -> {
           if (request.getDateResponse() == null) {
-            logError(ERROR_NO_RESPONSE_YET);
+            log.error(ERROR_NO_RESPONSE_YET);
             return Mono.just(ERROR_NO_RESPONSE_YET);
           }
-          if (request.getApproved()) {
-            logError(ERROR_ALREADY_APPROVED);
+          if (Boolean.TRUE.equals(request.getApproved())) {
+            log.error(ERROR_ALREADY_APPROVED);
             return Mono.just(ERROR_ALREADY_APPROVED);
           }
           log.info("Number plate {} is valid", numberPlate);
-          return Mono.just("VALID");
+          return Mono.just(Constants.PLATE_VALID);
         })
-        .defaultIfEmpty("VALID");
+        .defaultIfEmpty(Constants.PLATE_VALID);
   }
 
   private Mono<Void> checkRequestCount(Integer idApplicant, Integer idCycle) {
     return requestRepository.countByApplicantAndCycle(idApplicant, idCycle)
         .flatMap(count -> {
           if (count >= 2) {
-            logError(ERROR_MAX_REQUESTS_REACHED);
+            log.error(ERROR_MAX_REQUESTS_REACHED);
             return Mono.error(new IllegalArgumentException(ERROR_MAX_REQUESTS_REACHED));
           }
           return Mono.empty();
@@ -83,26 +100,5 @@ public class RequestServiceImpl implements RequestService {
                 .updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))
             .then(requestRepository
                 .saveWorkflow(requestId, ID_STATUS_IN_REVISION, LocalDateTime.now())));
-  }
-
-  private void logError(String message) {
-    log.error("[ERROR] {}", message);
-  }
-
-  @Override
-  public Mono<Request> saveNewRequest(RequestDto request) {
-    return validateRequest(request.getNumberPlate())
-        .flatMap(validationResult -> {
-          if (!validationResult.equals("VALID")) {
-            return Mono.error(new IllegalArgumentException(validationResult));
-          }
-          return getCycle()
-              .flatMap(cycle -> checkRequestCount(request.getIdApplicant(), cycle.getIdCycle())
-                  .then(saveRequestAndWorkflow(request, cycle.getIdCycle()))
-                  .flatMap(savedRequest -> requestRepository.getAcceptorWithFewerRequests()
-                      .flatMap(idAcceptor -> updateAcceptorAndSaveWorkflow(savedRequest.getIdRequest(),
-                          idAcceptor))
-                      .thenReturn(savedRequest)));
-        });
   }
 }
