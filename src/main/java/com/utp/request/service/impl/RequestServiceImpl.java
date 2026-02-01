@@ -95,7 +95,7 @@ public class RequestServiceImpl implements RequestService {
   }
 
   private Mono<Void> updateAcceptorAndSaveWorkflow(Integer requestId, Integer idAcceptor) {
-    return requestRepository.updateAcceptorInRequest(requestId, idAcceptor)
+    return requestRepository.updateAcceptorInRequest(requestId, idAcceptor, ID_STATUS_IN_REVISION)
         .then(requestRepository.findById(requestId)
             .flatMap(request -> workflowRepository.selectWorkflowBefore(request.getNumberPlate()))
             .flatMap(workflowId -> workflowRepository

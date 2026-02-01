@@ -6,6 +6,7 @@ import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 
 @Repository
@@ -26,13 +27,16 @@ public interface RequestRepository extends R2dbcRepository<Request, Integer> {
       """)
   Mono<Integer> saveNewRequest(@Param("request") RequestDto request);
 
+  @Transactional
   @Query(value = """
       UPDATE requests
-      SET id_acceptor = :id_acceptor
+      SET id_acceptor = :id_acceptor,
+          id_status = :id_status
       WHERE id_request = :id_request;
       """)
   Mono<Void> updateAcceptorInRequest(@Param("id_request") int requestId,
-                                     @Param("id_acceptor") int idAcceptor);
+                                     @Param("id_acceptor") int idAcceptor,
+                                    @Param("id_status") int idStatus);
 
   @Query("SELECT * FROM requests WHERE number_plate = :numberPlate;")
   Mono<Request> findByNumberPlate(@Param("numberPlate") String numberPlate);
