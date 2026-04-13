@@ -1,6 +1,5 @@
 package com.utp.request.service.impl;
 
-import com.utp.request.model.entity.Cycle;
 import com.utp.request.model.entity.Request;
 import com.utp.request.model.dto.RequestDto;
 import com.utp.request.repository.CycleRepository;
@@ -12,8 +11,8 @@ import com.utp.request.util.CycleUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
-
 import java.time.LocalDateTime;
 
 import static com.utp.request.util.Constants.ERROR_ALREADY_APPROVED;
@@ -31,13 +30,14 @@ public class RequestServiceImpl implements RequestService {
   private final WorkflowRepository workflowRepository;
 
   @Override
+  @Transactional
   public Mono<Request> saveNewRequest(RequestDto request) {
     return validateRequest(request.getNumberPlate())
         .flatMap(validationResult -> {
           if (!validationResult.equals(Constants.PLATE_VALID)) {
             return Mono.error(new IllegalArgumentException(validationResult));
           }
-          return getCycle()
+          return cycleRepository.getCycleByNameCycle(CycleUtil.determineCycle())
               .flatMap(cycle -> checkRequestCount(request.getIdApplicant(), cycle.getIdCycle())
                   .then(saveRequestAndWorkflow(request, cycle.getIdCycle()))
                   .flatMap(savedRequest -> requestRepository.getAcceptorWithFewerRequests()
@@ -45,10 +45,6 @@ public class RequestServiceImpl implements RequestService {
                           idAcceptor))
                       .thenReturn(savedRequest)));
         });
-  }
-
-  private Mono<Cycle> getCycle() {
-    return cycleRepository.getCycleByNameCycle(CycleUtil.determineCycle());
   }
 
   private Mono<String> validateRequest(String numberPlate) {
