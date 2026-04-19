@@ -1,6 +1,5 @@
 package com.utp.request.util.error;
 
-import com.utp.request.generated.model.ParkingRequestResponse;
 import com.utp.request.generated.model.ModelApiException;
 import com.utp.request.generated.model.ApiExceptionDetail;
 import com.utp.request.util.Constants;
@@ -23,32 +22,28 @@ public class ErrorResponseHandler {
   private static final String ERROR_TYPE_FUNCTIONAL = "FUNCTIONAL";
   private static final String ERROR_TYPE_TECHNICAL = "TECHNICAL";
 
-  public Mono<ResponseEntity<ParkingRequestResponse>> buildValidationErrorResponse(IllegalArgumentException e) {
+  @ExceptionHandler(IllegalArgumentException.class)
+  public Mono<ResponseEntity<ModelApiException>> handleValidationError(IllegalArgumentException e) {
     log.error("Validation error: {}", e.getMessage());
     ModelApiException errorResponse = new ModelApiException();
-    errorResponse.description(HttpStatus.BAD_REQUEST.name());
-    errorResponse.errorType(ERROR_TYPE_FUNCTIONAL);
+    errorResponse.setDescription(e.getMessage());
+    errorResponse.setErrorType(ERROR_TYPE_FUNCTIONAL);
 
-    buildApiExceptionDetail(e, errorResponse);
+    buildApiExceptionDetail(e.getMessage(), errorResponse);
 
-    @SuppressWarnings("unchecked")
-    ResponseEntity<ParkingRequestResponse> response = (ResponseEntity<ParkingRequestResponse>)
-        (ResponseEntity<?>) ResponseEntity.badRequest().body(errorResponse);
-    return Mono.just(response);
+    return Mono.just(ResponseEntity.badRequest().body(errorResponse));
   }
 
-  public Mono<ResponseEntity<ParkingRequestResponse>> buildUnexpectedErrorResponse(Exception e) {
+  @ExceptionHandler(Exception.class)
+  public Mono<ResponseEntity<ModelApiException>> handleUnexpectedError(Exception e) {
     log.error("Unexpected error: {}", e.getMessage());
     ModelApiException errorResponse = new ModelApiException();
-    errorResponse.description("Ocurrió un error inesperado");
-    errorResponse.errorType(ERROR_TYPE_TECHNICAL);
+    errorResponse.setDescription("Ocurrió un error inesperado");
+    errorResponse.setErrorType(ERROR_TYPE_TECHNICAL);
 
-    buildApiExceptionDetail(e, errorResponse);
+    buildApiExceptionDetail(e.getMessage(), errorResponse);
 
-    @SuppressWarnings("unchecked")
-    ResponseEntity<ParkingRequestResponse> response = (ResponseEntity<ParkingRequestResponse>)
-        (ResponseEntity<?>) ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-    return Mono.just(response);
+    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse));
   }
 
   @ExceptionHandler(MissingRequestValueException.class)
@@ -58,26 +53,19 @@ public class ErrorResponseHandler {
     String headerName = extractHeaderName(e.getMessage());
 
     ModelApiException errorResponse = new ModelApiException();
-    errorResponse.description("Header requerido faltante: " + headerName);
-    errorResponse.errorType(ERROR_TYPE_FUNCTIONAL);
+    errorResponse.setDescription("Header requerido faltante: " + headerName);
+    errorResponse.setErrorType(ERROR_TYPE_FUNCTIONAL);
 
-    ArrayList<ApiExceptionDetail> details = new ArrayList<>();
-    ApiExceptionDetail detail = new ApiExceptionDetail();
-    detail.component(Constants.NAME_MICROSERVICE);
-    detail.description("El header '" + headerName + "' es requerido pero no fue proporcionado");
-    details.add(detail);
-
-    errorResponse.setExceptionDetails(details);
-    errorResponse.setProperties(new HashMap<>());
+    buildApiExceptionDetail("El header '" + headerName + "' es requerido pero no fue proporcionado", errorResponse);
 
     return Mono.just(ResponseEntity.badRequest().body(errorResponse));
   }
 
-  private void buildApiExceptionDetail(Exception e, ModelApiException errorResponse) {
+  private void buildApiExceptionDetail(String description, ModelApiException errorResponse) {
     ArrayList<ApiExceptionDetail> details = new ArrayList<>();
     ApiExceptionDetail detail = new ApiExceptionDetail();
-    detail.component(Constants.NAME_MICROSERVICE);
-    detail.description(e.getMessage());
+    detail.setComponent(Constants.NAME_MICROSERVICE);
+    detail.setDescription(description);
     details.add(detail);
 
     errorResponse.setExceptionDetails(details);

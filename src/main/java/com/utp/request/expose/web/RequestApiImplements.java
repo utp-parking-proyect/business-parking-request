@@ -1,6 +1,5 @@
 package com.utp.request.expose.web;
 
-import com.utp.request.util.error.ErrorResponseHandler;
 import com.utp.request.generated.api.RequestApi;
 import com.utp.request.generated.model.ParkingRequest;
 import com.utp.request.generated.model.ParkingRequestResponse;
@@ -20,7 +19,6 @@ import reactor.core.publisher.Mono;
 public class RequestApiImplements implements RequestApi {
 
   private final RequestService requestService;
-  private final ErrorResponseHandler errorResponseHandler;
 
   @Override
   public Mono<ResponseEntity<ParkingRequestResponse>> createParkingRequest(
@@ -47,10 +45,6 @@ public class RequestApiImplements implements RequestApi {
                   .header("app-code", appCode)
                   .header("caller-name", callerName)
                   .body(new ParkingRequestResponse().parkingRequestId(savedRequest.getIdRequest()));
-            })
-            .onErrorResume(IllegalArgumentException.class,
-                errorResponseHandler::buildValidationErrorResponse)
-            .onErrorResume(Exception.class,
-                errorResponseHandler::buildUnexpectedErrorResponse));
+            }));
   }
 }
