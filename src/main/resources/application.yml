@@ -15,8 +15,10 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MariaDBDialect
+
 server:
   port: 9002
+
 eureka:
   client:
     serviceUrl:
