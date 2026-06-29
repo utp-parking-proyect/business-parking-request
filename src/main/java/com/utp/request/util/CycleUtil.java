@@ -1,12 +1,11 @@
 package com.utp.request.util;
 
+import lombok.experimental.UtilityClass;
+
 import java.time.LocalDate;
 
+@UtilityClass
 public final class CycleUtil {
-
-  private CycleUtil() {
-    throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
-  }
 
   public static String determineCycle() {
     LocalDate now = LocalDate.now();

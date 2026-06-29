@@ -1,5 +1,6 @@
 package com.utp.request.service.impl;
 
+import com.utp.request.generated.model.ParkingRequestIn;
 import com.utp.request.model.entity.Request;
 import com.utp.request.model.dto.RequestDto;
 import com.utp.request.repository.CycleRepository;
@@ -13,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
+
 import java.time.LocalDateTime;
 
 import static com.utp.request.util.Constants.ERROR_ALREADY_APPROVED;
@@ -31,7 +33,7 @@ public class RequestServiceImpl implements RequestService {
 
   @Override
   @Transactional
-  public Mono<Request> saveNewRequest(RequestDto request) {
+  public Mono<Request> saveNewRequest(ParkingRequestIn request) {
     return validateRequest(request.getNumberPlate())
         .flatMap(validationResult -> {
           if (!validationResult.equals(Constants.PLATE_VALID)) {
@@ -76,12 +78,13 @@ public class RequestServiceImpl implements RequestService {
         });
   }
 
-  private Mono<Request> saveRequestAndWorkflow(RequestDto request, Integer cycleId) {
-    request.setIdCycle(cycleId);
-    request.setDateRequest(LocalDateTime.now());
-    request.setApproved(Constants.ID_STATUS_NOT_APPROVED);
-    request.setIdStatus(Constants.ID_STATUS_REGISTERED);
-    return requestRepository.saveNewRequest(request)
+  private Mono<Request> saveRequestAndWorkflow(ParkingRequestIn request, Integer cycleId) {
+    return requestRepository.saveNewRequest(RequestDto.builder()
+            .idCycle(cycleId)
+            .dateRequest(LocalDateTime.now())
+            .approved(Constants.ID_STATUS_NOT_APPROVED)
+            .idStatus(Constants.ID_STATUS_REGISTERED)
+            .build())
         .flatMap(requestId -> workflowRepository.selectWorkflowBefore(request.getNumberPlate())
             .flatMap(workflowId -> workflowRepository
                 .updateDateUpdateInWorkflow(workflowId, LocalDateTime.now()))

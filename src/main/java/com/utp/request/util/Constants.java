@@ -1,10 +1,9 @@
 package com.utp.request.util;
 
-public final class Constants {
+import lombok.experimental.UtilityClass;
 
-  private Constants() {
-    throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
-  }
+@UtilityClass
+public final class Constants {
 
   public static final Integer ID_STATUS_REGISTERED = 1;
   public static final Integer ID_STATUS_IN_REVISION = 2;
