@@ -1,4 +1,4 @@
-package com.utp.request.client.users;
+package com.utp.request.client.portal;
 
 import com.utp.request.generated.client.users.model.CycleResponse;
 import com.utp.request.generated.client.users.model.Role;
@@ -14,19 +14,19 @@ import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
-public class UsersServiceClient {
+public class PortalServiceClient {
 
-  private final WebClient usersWebClient;
+  private final WebClient portalWebClient;
 
   public Mono<UserResponse> getUserById(Long id) {
-    return usersWebClient.get()
+    return portalWebClient.get()
         .uri("/users/{id}", id)
         .retrieve()
         .bodyToMono(UserResponse.class);
   }
 
   public Flux<UserResponse> getEligibleAcceptors(Long idCampus) {
-    return usersWebClient.get()
+    return portalWebClient.get()
         .uri(uriBuilder -> uriBuilder
             .path("/users/by-role/{roleName}")
             .queryParamIfPresent("idCampus", Optional.ofNullable(idCampus))
@@ -45,14 +45,14 @@ public class UsersServiceClient {
   }
 
   public Mono<CycleResponse> getCurrentCycle() {
-    return usersWebClient.get()
+    return portalWebClient.get()
         .uri("/cycles/current")
         .retrieve()
         .bodyToMono(CycleResponse.class);
   }
 
   public Mono<CycleResponse> getCycleById(Long id) {
-    return usersWebClient.get()
+    return portalWebClient.get()
         .uri("/cycles/{id}", id)
         .retrieve()
         .bodyToMono(CycleResponse.class);

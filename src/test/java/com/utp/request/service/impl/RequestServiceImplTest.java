@@ -1,6 +1,6 @@
 package com.utp.request.service.impl;
 
-import com.utp.request.client.users.UsersServiceClient;
+import com.utp.request.client.portal.PortalServiceClient;
 import com.utp.request.generated.client.users.model.CampusResponse;
 import com.utp.request.generated.client.users.model.CycleResponse;
 import com.utp.request.generated.client.users.model.Role;
@@ -58,7 +58,7 @@ class RequestServiceImplTest {
   @Mock
   private VehicleTypeRepository vehicleTypeRepository;
   @Mock
-  private UsersServiceClient usersServiceClient;
+  private PortalServiceClient portalServiceClient;
   @Mock
   private TransactionalOperator transactionalOperator;
 
@@ -79,7 +79,7 @@ class RequestServiceImplTest {
 
   @BeforeEach
   void mockApplicant() {
-    Mockito.lenient().when(usersServiceClient.getUserById(APPLICANT_ID))
+    Mockito.lenient().when(portalServiceClient.getUserById(APPLICANT_ID))
         .thenReturn(Mono.just(applicant(APPLICANT_ID, CAMPUS_ID)));
   }
 
@@ -144,14 +144,14 @@ class RequestServiceImplTest {
     Request finalRequest = request(200, 100, 5, 2);
     finalRequest.setIdAcceptor(21);
 
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.empty());
     when(vehicleRepository.insertVehicle(1, 10, "HNC-234")).thenReturn(Mono.just(100));
     when(vehicleRepository.findById(100)).thenReturn(Mono.just(createdVehicle));
     when(requestRepository.findByIdVehicleAndIdCycle(100, 5)).thenReturn(Mono.empty());
     when(requestRepository.insertRequest(any(), any(), any(), any())).thenReturn(Mono.just(200));
     when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
-    when(usersServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L), saeUser(21L)));
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L), saeUser(21L)));
     when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(3L));
     when(requestRepository.countByIdAcceptorAndIdStatus(21, 2)).thenReturn(Mono.just(1L));
     when(requestRepository.updateAcceptorAndStatus(200, 21, 2)).thenReturn(Mono.empty());
@@ -168,7 +168,7 @@ class RequestServiceImplTest {
   @Test
   void testSaveNewRequest_VehicleOwnedByAnotherUser_IsForbidden() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle(100, 99)));
 
     StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
@@ -179,7 +179,7 @@ class RequestServiceImplTest {
   @Test
   void testSaveNewRequest_ExistingInReviewRequest_IsConflict() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle(100, 10)));
     when(requestRepository.findByIdVehicleAndIdCycle(100, 5))
         .thenReturn(Mono.just(request(200, 100, 5, 2)));
@@ -192,7 +192,7 @@ class RequestServiceImplTest {
   @Test
   void testSaveNewRequest_ExistingRejectedRequest_SuggestsResubmit() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle(100, 10)));
     when(requestRepository.findByIdVehicleAndIdCycle(100, 5))
         .thenReturn(Mono.just(request(200, 100, 5, 4)));
@@ -206,12 +206,12 @@ class RequestServiceImplTest {
   @Test
   void testSaveNewRequest_NoAcceptorAvailable_IsConflict() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle(100, 10)));
     when(requestRepository.findByIdVehicleAndIdCycle(100, 5)).thenReturn(Mono.empty());
     when(requestRepository.insertRequest(any(), any(), any(), any())).thenReturn(Mono.just(200));
     when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
-    when(usersServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.empty());
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.empty());
 
     StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
         .expectError(ConflictException.class)
@@ -221,7 +221,7 @@ class RequestServiceImplTest {
   @Test
   void testSaveNewRequest_UsersServiceUnavailable_PropagatesError() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.error(new RuntimeException("unavailable")));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.error(new RuntimeException("unavailable")));
 
     StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
         .expectError(RuntimeException.class)
@@ -236,12 +236,12 @@ class RequestServiceImplTest {
     Request finalRequest = request(200, 100, 5, 2);
     finalRequest.setIdAcceptor(20);
 
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(requestRepository.findById(200)).thenReturn(Mono.just(existing), Mono.just(finalRequest));
     when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 10)));
     when(requestRepository.updateStatusAndResponse(200, 1, null)).thenReturn(Mono.empty());
     when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
-    when(usersServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
     when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(0L));
     when(requestRepository.updateAcceptorAndStatus(200, 20, 2)).thenReturn(Mono.empty());
 
@@ -254,7 +254,7 @@ class RequestServiceImplTest {
 
   @Test
   void testResubmitRequest_NotFound() {
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(requestRepository.findById(200)).thenReturn(Mono.empty());
 
     StepVerifier.create(requestService.resubmitRequest(APPLICANT_ID, 200, null))
@@ -265,7 +265,7 @@ class RequestServiceImplTest {
   @Test
   void testResubmitRequest_NotRejected_IsConflict() {
     Request existing = request(200, 100, 5, 2);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(requestRepository.findById(200)).thenReturn(Mono.just(existing));
     when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 10)));
 
@@ -277,7 +277,7 @@ class RequestServiceImplTest {
   @Test
   void testResubmitRequest_WrongCycle_IsConflict() {
     Request existing = request(200, 100, 5, 4);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(6)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(6)));
     when(requestRepository.findById(200)).thenReturn(Mono.just(existing));
     when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 10)));
 
@@ -289,7 +289,7 @@ class RequestServiceImplTest {
   @Test
   void testResubmitRequest_VehicleOwnedByAnotherUser_IsForbidden() {
     Request existing = request(200, 100, 5, 4);
-    when(usersServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(requestRepository.findById(200)).thenReturn(Mono.just(existing));
     when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 99)));
 
@@ -311,12 +311,12 @@ class RequestServiceImplTest {
     vehicleType.setIdVehicleType(1);
     vehicleType.setNameVehicleType("Motocicleta");
 
-    when(usersServiceClient.getUserById(20L)).thenReturn(Mono.just(acceptor));
-    when(usersServiceClient.hasSaeRole(acceptor)).thenReturn(true);
+    when(portalServiceClient.getUserById(20L)).thenReturn(Mono.just(acceptor));
+    when(portalServiceClient.hasSaeRole(acceptor)).thenReturn(true);
     when(requestRepository.findAllByIdAcceptor(20)).thenReturn(Flux.just(req));
     when(vehicleRepository.findAllById(Set.of(100))).thenReturn(Flux.just(vehicle(100, 10)));
     when(statusRepository.findAllById(Set.of(2))).thenReturn(Flux.just(status));
-    when(usersServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
     when(vehicleTypeRepository.findAllById(Set.of(1))).thenReturn(Flux.just(vehicleType));
 
     StepVerifier.create(requestService.getParkingRequestsByAcceptor(20))
@@ -334,8 +334,8 @@ class RequestServiceImplTest {
     notSae.setIdUser(20L);
     notSae.setRoles(List.of());
 
-    when(usersServiceClient.getUserById(20L)).thenReturn(Mono.just(notSae));
-    when(usersServiceClient.hasSaeRole(notSae)).thenReturn(false);
+    when(portalServiceClient.getUserById(20L)).thenReturn(Mono.just(notSae));
+    when(portalServiceClient.hasSaeRole(notSae)).thenReturn(false);
 
     StepVerifier.create(requestService.getParkingRequestsByAcceptor(20))
         .expectError(ForbiddenException.class)
@@ -344,7 +344,7 @@ class RequestServiceImplTest {
 
   @Test
   void testGetParkingRequestsByAcceptor_AcceptorNotFound() {
-    when(usersServiceClient.getUserById(20L)).thenReturn(Mono.empty());
+    when(portalServiceClient.getUserById(20L)).thenReturn(Mono.empty());
 
     StepVerifier.create(requestService.getParkingRequestsByAcceptor(20))
         .expectError(NotFoundException.class)
@@ -366,7 +366,7 @@ class RequestServiceImplTest {
     when(requestRepository.findAllByApplicantUserId(10)).thenReturn(Flux.just(req));
     when(vehicleRepository.findAllById(Set.of(100))).thenReturn(Flux.just(vehicle(100, 10)));
     when(statusRepository.findAllById(Set.of(2))).thenReturn(Flux.just(status));
-    when(usersServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
+    when(portalServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
     when(vehicleTypeRepository.findAllById(Set.of(1))).thenReturn(Flux.just(vehicleType));
 
     StepVerifier.create(requestService.getParkingRequestsByApplicant(10))
@@ -380,7 +380,7 @@ class RequestServiceImplTest {
 
   @Test
   void testGetParkingRequestsByApplicant_ApplicantNotFound() {
-    when(usersServiceClient.getUserById(10L)).thenReturn(Mono.empty());
+    when(portalServiceClient.getUserById(10L)).thenReturn(Mono.empty());
 
     StepVerifier.create(requestService.getParkingRequestsByApplicant(10))
         .expectError(NotFoundException.class)
