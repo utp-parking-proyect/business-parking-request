@@ -19,19 +19,19 @@ public final class Constants {
   public static final String OBSERVATION_RESUBMITTED_DEFAULT = "Solicitud reenviada para una nueva revisión.";
 
   public static final String ERROR_VEHICLE_OWNED_BY_ANOTHER_USER =
-      "The vehicle with this number plate belongs to another user";
+      "El vehículo con esta placa pertenece a otro usuario";
   public static final String ERROR_REQUEST_ALREADY_EXISTS =
-      "A request already exists for this vehicle in the current cycle";
+      "Ya existe una solicitud para este vehículo en el ciclo actual";
   public static final String ERROR_REQUEST_REJECTED_USE_RESUBMIT =
-      "This request was rejected, use the resubmit endpoint instead";
-  public static final String ERROR_REQUEST_NOT_FOUND = "Request not found";
+      "Esta solicitud fue rechazada, utilice el endpoint de reenvío en su lugar";
+  public static final String ERROR_REQUEST_NOT_FOUND = "La solicitud no existe";
   public static final String ERROR_REQUEST_NOT_REJECTED =
-      "The request is not in a rejected state and cannot be resubmitted";
+      "La solicitud no se encuentra en estado rechazado y no puede ser reenviada";
   public static final String ERROR_REQUEST_WRONG_CYCLE =
-      "The request does not belong to the current cycle";
-  public static final String ERROR_ACCEPTOR_NOT_FOUND = "Acceptor not found";
-  public static final String ERROR_APPLICANT_NOT_FOUND = "Applicant not found";
-  public static final String ERROR_ACCEPTOR_NOT_SAE = "The acceptor is not Personal SAE";
-  public static final String ERROR_NO_ACCEPTOR_AVAILABLE = "No Personal SAE is available to be assigned";
-  public static final String ERROR_USERS_SERVICE_UNAVAILABLE = "business-core-portal is not available";
+      "La solicitud no pertenece al ciclo actual";
+  public static final String ERROR_ACCEPTOR_NOT_FOUND = "El aceptante no existe";
+  public static final String ERROR_APPLICANT_NOT_FOUND = "El solicitante no existe";
+  public static final String ERROR_ACCEPTOR_NOT_SAE = "El aceptante no es Personal SAE";
+  public static final String ERROR_NO_ACCEPTOR_AVAILABLE = "No hay Personal SAE disponible para ser asignado";
+  public static final String ERROR_USERS_SERVICE_UNAVAILABLE = "business-core-portal no se encuentra disponible";
 }

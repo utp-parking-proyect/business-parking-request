@@ -339,11 +339,11 @@ paths:
                 $ref: '#/components/schemas/ApiException'
   /response/{requestId}:
     patch:
-      operationId: createParkingResponse
-      summary: Registra respuestas de solicitudes de ingreso a estacionamiento de la UTP.
+      operationId: respondToParkingRequest
+      summary: Registra la respuesta de Personal SAE a una solicitud de ingreso a estacionamiento de la UTP.
       description: |-
         ### Acerca de la funcionalidad expuesta
-        Esta API recibe la respuesta para la creación de una solicitud de ingreso al estacionamiento, enviadas por los canales web y móvil.
+        Esta API permite que el Personal SAE asignado como aceptante apruebe o rechace una solicitud de ingreso al estacionamiento.
 
         ### Data de Prueba
         No aplica.
@@ -369,14 +369,14 @@ paths:
               $ref: '#/components/schemas/ParkingResponseIn'
         required: true
       responses:
-        '201':
-          description: Proceso de Registro Satisfactorio.
+        '200':
+          description: Proceso de Respuesta Satisfactorio.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ParkingResponseOut'
         '400':
-          description: Los datos proporcionados no son válidos.
+          description: Los datos proporcionados no son válidos, o falta el comentario requerido al rechazar la solicitud.
           content:
             application/json:
               schema:
@@ -388,19 +388,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiException'
         '403':
-          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          description: El usuario autenticado no tiene el rol ROLE_SAE, o no es el aceptante asignado a la solicitud.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiException'
         '404':
-          description: El recurso solicitado no fue encontrado.
+          description: La solicitud indicada no existe.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiException'
         '409':
-          description: Los datos proporcionados no son válidos.
+          description: La solicitud no se encuentra en un estado que permita ser respondida.
           content:
             application/json:
               schema:
@@ -485,26 +485,32 @@ components:
           example: 2024-1
     ParkingResponseIn:
       type: object
+      required:
+        - approved
       properties:
-        parkingResponseId:
-          type: integer
-          description: Identificador de la respuesta
-          example: 1
+        approved:
+          type: boolean
+          description: Indica si la solicitud fue aprobada o rechazada por Personal SAE.
+          example: true
+        comment:
+          type: string
+          description: Comentario del Personal SAE sobre la solicitud. Es obligatorio cuando approved es false.
+          example: La documentación presentada no es válida.
     ParkingResponseOut:
       type: object
       properties:
         approved:
           type: boolean
-          description: Identificador de la solicitud
+          description: Indica si la solicitud fue aprobada o rechazada.
           example: true
         comment:
           type: string
           description: Comentario sobre la solicitud.
-          example: Solicitud aprobada
+          example: Solicitud aprobada correctamente.
         statusId:
           type: integer
-          description: Identificador del estado de la solicitud.
-          example: 1
+          description: Identificador del nuevo estado de la solicitud.
+          example: 3
     ParkingRequestIn:
       type: object
       required:

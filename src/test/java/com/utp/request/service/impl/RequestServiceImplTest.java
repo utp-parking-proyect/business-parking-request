@@ -199,7 +199,7 @@ class RequestServiceImplTest {
 
     StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
         .expectErrorMatches(error -> error instanceof ConflictException
-            && error.getMessage().toLowerCase().contains("resubmit"))
+            && error.getMessage().toLowerCase().contains("reenv"))
         .verify();
   }
 

@@ -28,7 +28,7 @@ class ErrorResponseHandlerTest {
   @Test
   void testHandleValidationError() {
     // Arrange
-    IllegalArgumentException exception = new IllegalArgumentException("Invalid data");
+    IllegalArgumentException exception = new IllegalArgumentException("Datos inválidos");
 
     // Act & Assert
     Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleValidationError(exception);
@@ -37,7 +37,7 @@ class ErrorResponseHandlerTest {
         .assertNext(response -> {
           assert response.getStatusCode() == HttpStatus.BAD_REQUEST;
           assert response.getBody() != null;
-          assert response.getBody().getDescription().equals("Invalid data");
+          assert response.getBody().getDescription().equals("Datos inválidos");
           assert response.getBody().getErrorType().equals("FUNCTIONAL");
         })
         .verifyComplete();
@@ -46,7 +46,7 @@ class ErrorResponseHandlerTest {
   @Test
   void testHandleUnexpectedError() {
     // Arrange
-    Exception exception = new Exception("Unexpected error occurred");
+    Exception exception = new Exception("Ocurrió un error inesperado en el servidor");
 
     // Act & Assert
     Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleUnexpectedError(exception);
@@ -80,7 +80,7 @@ class ErrorResponseHandlerTest {
 
   @Test
   void testHandleNotFound() {
-    NotFoundException exception = new NotFoundException("Request not found");
+    NotFoundException exception = new NotFoundException("La solicitud no existe");
 
     Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleNotFound(exception);
 
@@ -88,14 +88,14 @@ class ErrorResponseHandlerTest {
         .assertNext(response -> {
           assert response.getStatusCode() == HttpStatus.NOT_FOUND;
           assert response.getBody() != null;
-          assert response.getBody().getDescription().equals("Request not found");
+          assert response.getBody().getDescription().equals("La solicitud no existe");
         })
         .verifyComplete();
   }
 
   @Test
   void testHandleConflict() {
-    ConflictException exception = new ConflictException("A request already exists");
+    ConflictException exception = new ConflictException("Ya existe una solicitud");
 
     Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleConflict(exception);
 
@@ -103,14 +103,14 @@ class ErrorResponseHandlerTest {
         .assertNext(response -> {
           assert response.getStatusCode() == HttpStatus.CONFLICT;
           assert response.getBody() != null;
-          assert response.getBody().getDescription().equals("A request already exists");
+          assert response.getBody().getDescription().equals("Ya existe una solicitud");
         })
         .verifyComplete();
   }
 
   @Test
   void testHandleForbidden() {
-    ForbiddenException exception = new ForbiddenException("Vehicle belongs to another user");
+    ForbiddenException exception = new ForbiddenException("El vehículo pertenece a otro usuario");
 
     Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleForbidden(exception);
 
