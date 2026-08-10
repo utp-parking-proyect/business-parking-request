@@ -26,7 +26,7 @@ public class ErrorResponseHandler {
 
   @ExceptionHandler(IllegalArgumentException.class)
   public Mono<ResponseEntity<ModelApiException>> handleValidationError(IllegalArgumentException e) {
-    log.error("Validation error: {}", e.getMessage());
+    log.error("Error de validación: {}", e.getMessage());
     ModelApiException errorResponse = new ModelApiException();
     errorResponse.setDescription(e.getMessage());
     errorResponse.setErrorType(ERROR_TYPE_FUNCTIONAL);
@@ -38,35 +38,35 @@ public class ErrorResponseHandler {
 
   @ExceptionHandler(NotFoundException.class)
   public Mono<ResponseEntity<ModelApiException>> handleNotFound(NotFoundException e) {
-    log.error("Not found: {}", e.getMessage());
+    log.error("No encontrado: {}", e.getMessage());
     return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
         .body(buildFunctionalError(e.getMessage())));
   }
 
   @ExceptionHandler(ConflictException.class)
   public Mono<ResponseEntity<ModelApiException>> handleConflict(ConflictException e) {
-    log.error("Conflict: {}", e.getMessage());
+    log.error("Conflicto: {}", e.getMessage());
     return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
         .body(buildFunctionalError(e.getMessage())));
   }
 
   @ExceptionHandler(ForbiddenException.class)
   public Mono<ResponseEntity<ModelApiException>> handleForbidden(ForbiddenException e) {
-    log.error("Forbidden: {}", e.getMessage());
+    log.error("Prohibido: {}", e.getMessage());
     return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
         .body(buildFunctionalError(e.getMessage())));
   }
 
   @ExceptionHandler({WebClientResponseException.class, WebClientRequestException.class})
   public Mono<ResponseEntity<ModelApiException>> handleUsersServiceUnavailable(Exception e) {
-    log.error("business-core-portal call failed: {}", e.getMessage());
+    log.error("Falló la llamada a business-core-portal: {}", e.getMessage());
     return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
         .body(buildFunctionalError(Constants.ERROR_USERS_SERVICE_UNAVAILABLE)));
   }
 
   @ExceptionHandler(Exception.class)
   public Mono<ResponseEntity<ModelApiException>> handleUnexpectedError(Exception e) {
-    log.error("Unexpected error: {}", e.getMessage());
+    log.error("Error inesperado", e);
     ModelApiException errorResponse = new ModelApiException();
     errorResponse.setDescription("Ocurrió un error inesperado");
     errorResponse.setErrorType(ERROR_TYPE_TECHNICAL);
@@ -78,7 +78,7 @@ public class ErrorResponseHandler {
 
   @ExceptionHandler(MissingRequestValueException.class)
   public Mono<ResponseEntity<ModelApiException>> handleMissingRequestValue(MissingRequestValueException e) {
-    log.error("Missing request value: {}", e.getMessage());
+    log.error("Falta un valor requerido en la petición: {}", e.getMessage());
 
     String headerName = extractHeaderName(e.getMessage());
 
@@ -116,6 +116,6 @@ public class ErrorResponseHandler {
     if (startIndex > 0 && endIndex > startIndex) {
       return message.substring(startIndex, endIndex);
     }
-    return "Unknown header";
+    return "Header desconocido";
   }
 }
