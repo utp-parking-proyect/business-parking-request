@@ -14,7 +14,7 @@ tags:
   - name: Response Controller
     description: Parking response data controller
 paths:
-  /request/{acceptorId}:
+  /request/acceptor/{acceptorId}:
     get:
       operationId: getParkingRequestsByAcceptor
       summary: Obtiene todas las solicitudes de ingreso a estacionamiento de la UTP por aceptante.
@@ -93,13 +93,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiException'
+  /request/applicant/{applicantId}:
+    get:
+      operationId: getParkingRequestsByApplicant
+      summary: Obtiene todas las solicitudes de ingreso a estacionamiento de la UTP realizadas por un usuario.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Este endpoint obtiene todas las solicitudes de estacionamiento registradas por un usuario (solicitante), a través de los vehículos que le pertenecen.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Request Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: applicantId
+          in: path
+          description: ID del usuario solicitante.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Listado de solicitudes de estacionamiento del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingRequestInformationList'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El recurso solicitado no fue encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
   /request:
     post:
       operationId: createParkingRequest
       summary: Registra solicitudes de ingreso a estacionamiento de la UTP.
       description: |-
         ### Acerca de la funcionalidad expuesta
-        Esta API recibe la solicitud para la creación de una solicitud de ingreso al estacionamiento, enviadas por los canales web y móvil.
+        Esta API recibe la solicitud para la creación de una solicitud de ingreso al estacionamiento, enviadas por los canales web y móvil. El solicitante se determina a partir del usuario autenticado, no del cuerpo de la petición.
 
         ### Data de Prueba
         No aplica.
@@ -150,6 +229,92 @@ paths:
                 $ref: '#/components/schemas/ApiException'
         '409':
           description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /request/{requestId}/resubmit:
+    post:
+      operationId: resubmitParkingRequest
+      summary: Reenvía una solicitud rechazada de ingreso a estacionamiento de la UTP para una nueva revisión.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Permite que el propietario de una solicitud en estado RECHAZADO la reenvíe para una nueva revisión, conservando el mismo identificador de solicitud, vehículo y ciclo. Genera nuevas entradas en el historial de workflow.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Request Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: requestId
+          in: path
+          description: ID de la solicitud a reenviar.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Entrada del Servicio.
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParkingRequestResubmitIn'
+      responses:
+        '200':
+          description: Proceso de Reingreso Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingRequestOut'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El recurso solicitado no fue encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: La solicitud no se encuentra en un estado válido para ser reenviada.
           content:
             application/json:
               schema:
@@ -275,6 +440,11 @@ components:
           type: string
           description: Fecha de la solicitud.
           example: '2024-06-01T10:00:00Z'
+        dateResponse:
+          type: string
+          description: Fecha de la respuesta de la solicitud, si ya fue atendida.
+          example: '2024-06-02T10:00:00Z'
+          nullable: true
         status:
           type: string
           description: Estado de la solicitud.
@@ -290,28 +460,28 @@ components:
           type: string
           description: Placa del vehículo.
           example: HNC-234
-        isNew:
-          type: boolean
-          description: Validación si el vehículo es nuevo o no
-          example: true
     ApplicantInformation:
       type: object
       properties:
-        codeApplicant:
-          type: string
-          description: Codigo del alumno.
-          example: U23201703
+        idApplicant:
+          type: integer
+          description: Identificador del solicitante.
+          example: 1
         nameApplicant:
           type: string
-          description: Nombre del alumno.
+          description: Nombre del solicitante.
           example: Juan
         lastNameApplicant:
           type: string
-          description: Apellido del alumno.
+          description: Apellido del solicitante.
           example: Pérez
+        usernameApplicant:
+          type: string
+          description: Nombre de usuario del solicitante.
+          example: U23201703
         numberCycle:
           type: string
-          description: Número de ciclo del alumno.
+          description: Número de ciclo de la solicitud.
           example: 2024-1
     ParkingResponseIn:
       type: object
@@ -337,23 +507,24 @@ components:
           example: 1
     ParkingRequestIn:
       type: object
+      required:
+        - numberPlate
       properties:
-        idApplicant:
-          type: integer
-          description: ID del alumno.
-          example: 1
         vehicleType:
           type: integer
-          description: Tipo del vehículo.
+          description: Tipo del vehículo. Requerido únicamente si la placa no está asociada a un vehículo existente.
           example: 1
         numberPlate:
           type: string
           description: Placa del vehículo.
           example: HNC-234
-        isNew:
-          type: boolean
-          description: Validación si el vehículo es nuevo o no
-          example: true
+    ParkingRequestResubmitIn:
+      type: object
+      properties:
+        observation:
+          type: string
+          description: Observación del reingreso de la solicitud.
+          example: Documentación corregida y solicitud reenviada.
     ParkingRequestOut:
       type: object
       properties:

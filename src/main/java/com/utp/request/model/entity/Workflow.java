@@ -21,9 +21,9 @@ public class Workflow {
   @Column("id_status")
   private Integer idStatus;
 
-  @Column("date_create")
-  private LocalDateTime dateCreate;
+  @Column("date_status_change")
+  private LocalDateTime dateStatusChange;
 
-  @Column("date_update")
-  private LocalDateTime dateUpdate;
+  @Column("observation")
+  private String observation;
 }

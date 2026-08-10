@@ -6,8 +6,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.MissingRequestValueException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -72,6 +74,65 @@ class ErrorResponseHandlerTest {
           assert response.getStatusCode() == HttpStatus.BAD_REQUEST;
           assert response.getBody() != null;
           assert response.getBody().getErrorType().equals("FUNCTIONAL");
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testHandleNotFound() {
+    NotFoundException exception = new NotFoundException("Request not found");
+
+    Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleNotFound(exception);
+
+    StepVerifier.create(result)
+        .assertNext(response -> {
+          assert response.getStatusCode() == HttpStatus.NOT_FOUND;
+          assert response.getBody() != null;
+          assert response.getBody().getDescription().equals("Request not found");
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testHandleConflict() {
+    ConflictException exception = new ConflictException("A request already exists");
+
+    Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleConflict(exception);
+
+    StepVerifier.create(result)
+        .assertNext(response -> {
+          assert response.getStatusCode() == HttpStatus.CONFLICT;
+          assert response.getBody() != null;
+          assert response.getBody().getDescription().equals("A request already exists");
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testHandleForbidden() {
+    ForbiddenException exception = new ForbiddenException("Vehicle belongs to another user");
+
+    Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleForbidden(exception);
+
+    StepVerifier.create(result)
+        .assertNext(response -> {
+          assert response.getStatusCode() == HttpStatus.FORBIDDEN;
+          assert response.getBody() != null;
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testHandleUsersServiceUnavailable() {
+    WebClientResponseException exception = WebClientResponseException.create(
+        503, "Service Unavailable", HttpHeaders.EMPTY, new byte[0], null);
+
+    Mono<ResponseEntity<ModelApiException>> result = errorResponseHandler.handleUsersServiceUnavailable(exception);
+
+    StepVerifier.create(result)
+        .assertNext(response -> {
+          assert response.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE;
+          assert response.getBody() != null;
         })
         .verifyComplete();
   }

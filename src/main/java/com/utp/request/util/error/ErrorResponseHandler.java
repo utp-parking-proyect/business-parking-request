@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.MissingRequestValueException;
 import reactor.core.publisher.Mono;
 import java.util.ArrayList;
@@ -32,6 +34,34 @@ public class ErrorResponseHandler {
     buildApiExceptionDetail(e.getMessage(), errorResponse);
 
     return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+  }
+
+  @ExceptionHandler(NotFoundException.class)
+  public Mono<ResponseEntity<ModelApiException>> handleNotFound(NotFoundException e) {
+    log.error("Not found: {}", e.getMessage());
+    return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(buildFunctionalError(e.getMessage())));
+  }
+
+  @ExceptionHandler(ConflictException.class)
+  public Mono<ResponseEntity<ModelApiException>> handleConflict(ConflictException e) {
+    log.error("Conflict: {}", e.getMessage());
+    return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(buildFunctionalError(e.getMessage())));
+  }
+
+  @ExceptionHandler(ForbiddenException.class)
+  public Mono<ResponseEntity<ModelApiException>> handleForbidden(ForbiddenException e) {
+    log.error("Forbidden: {}", e.getMessage());
+    return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(buildFunctionalError(e.getMessage())));
+  }
+
+  @ExceptionHandler({WebClientResponseException.class, WebClientRequestException.class})
+  public Mono<ResponseEntity<ModelApiException>> handleUsersServiceUnavailable(Exception e) {
+    log.error("business-core-portal call failed: {}", e.getMessage());
+    return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .body(buildFunctionalError(Constants.ERROR_USERS_SERVICE_UNAVAILABLE)));
   }
 
   @ExceptionHandler(Exception.class)
@@ -59,6 +89,14 @@ public class ErrorResponseHandler {
     buildApiExceptionDetail("El header '" + headerName + "' es requerido pero no fue proporcionado", errorResponse);
 
     return Mono.just(ResponseEntity.badRequest().body(errorResponse));
+  }
+
+  private ModelApiException buildFunctionalError(String message) {
+    ModelApiException errorResponse = new ModelApiException();
+    errorResponse.setDescription(message);
+    errorResponse.setErrorType(ERROR_TYPE_FUNCTIONAL);
+    buildApiExceptionDetail(message, errorResponse);
+    return errorResponse;
   }
 
   private void buildApiExceptionDetail(String description, ModelApiException errorResponse) {

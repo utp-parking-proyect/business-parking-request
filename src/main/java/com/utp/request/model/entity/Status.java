@@ -6,12 +6,13 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 @Data
-@Table("cycles")
-public class Cycle {
-  @Id
-  @Column("id_cycle")
-  private Integer idCycle;
+@Table("status")
+public class Status {
 
-  @Column("name_cycle")
-  private String nameCycle;
+  @Id
+  @Column("id_status")
+  private Integer idStatus;
+
+  @Column("name_status")
+  private String nameStatus;
 }

@@ -1,62 +1,58 @@
 package com.utp.request.repository;
 
 import com.utp.request.model.entity.Request;
-import com.utp.request.model.dto.RequestDto;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.time.LocalDateTime;
 
 @Repository
 public interface RequestRepository extends R2dbcRepository<Request, Integer> {
 
   @Query(value = """
-      INSERT INTO requests (id_applicant, id_vehicle_type, id_cycle, number_plate, date_request,
-                is_new, id_status, approved)
-      VALUES (:#{#request.idApplicant},
-              :#{#request.vehicleType},
-              :#{#request.idCycle},
-              :#{#request.numberPlate},
-              :#{#request.dateRequest},
-              :#{#request.isNew},
-              :#{#request.idStatus},
-              :#{#request.approved})
+      INSERT INTO requests (id_vehicle, id_cycle, id_status, date_request)
+      VALUES (:idVehicle, :idCycle, :idStatus, :dateRequest)
       RETURNING id_request;
       """)
-  Mono<Integer> saveNewRequest(@Param("request") RequestDto request);
+  Mono<Integer> insertRequest(@Param("idVehicle") Integer idVehicle,
+                               @Param("idCycle") Integer idCycle,
+                               @Param("idStatus") Integer idStatus,
+                               @Param("dateRequest") LocalDateTime dateRequest);
 
-  @Transactional
   @Query(value = """
       UPDATE requests
-      SET id_acceptor = :id_acceptor,
-          id_status = :id_status
-      WHERE id_request = :id_request;
+      SET id_acceptor = :idAcceptor,
+          id_status = :idStatus
+      WHERE id_request = :idRequest;
       """)
-  Mono<Void> updateAcceptorInRequest(@Param("id_request") int requestId,
-                                     @Param("id_acceptor") int idAcceptor,
-                                    @Param("id_status") int idStatus);
-
-  @Query("SELECT * FROM requests WHERE number_plate = :numberPlate;")
-  Mono<Request> findByNumberPlate(@Param("numberPlate") String numberPlate);
-
-  @Query("""
-      SELECT COUNT(*) FROM requests WHERE id_applicant = :idApplicant
-      AND id_cycle = :idCycle;
-      """)
-  Mono<Long> countByApplicantAndCycle(Integer idApplicant, Integer idCycle);
+  Mono<Void> updateAcceptorAndStatus(@Param("idRequest") Integer idRequest,
+                                     @Param("idAcceptor") Integer idAcceptor,
+                                     @Param("idStatus") Integer idStatus);
 
   @Query(value = """
-      SELECT ur.id_user AS id_acceptor,
-             COALESCE(COUNT(r.id_request), 0) AS pending_requests
-      FROM user_roles ur
-      JOIN role ro ON ur.id_role = ro.id_role
-      LEFT JOIN requests r ON ur.id_user = r.id_acceptor AND r.date_response IS NULL
-      WHERE ro.id_role = 3
-      GROUP BY ur.id_user
-      ORDER BY pending_requests
-      LIMIT 1;
+      UPDATE requests
+      SET id_status = :idStatus,
+          date_response = :dateResponse
+      WHERE id_request = :idRequest;
       """)
-  Mono<Integer> getAcceptorWithFewerRequests();
+  Mono<Void> updateStatusAndResponse(@Param("idRequest") Integer idRequest,
+                                     @Param("idStatus") Integer idStatus,
+                                     @Param("dateResponse") LocalDateTime dateResponse);
+
+  Mono<Request> findByIdVehicleAndIdCycle(Integer idVehicle, Integer idCycle);
+
+  Flux<Request> findAllByIdAcceptor(Integer idAcceptor);
+
+  Mono<Long> countByIdAcceptorAndIdStatus(Integer idAcceptor, Integer idStatus);
+
+  @Query(value = """
+      SELECT r.* FROM requests r
+      JOIN vehicles v ON v.id_vehicle = r.id_vehicle
+      WHERE v.id_user = :userId;
+      """)
+  Flux<Request> findAllByApplicantUserId(@Param("userId") Integer userId);
 }
