@@ -1,9 +1,10 @@
 package com.utp.request.expose.web;
 
-import com.utp.request.generated.model.ParkingRequest;
+import com.utp.request.generated.model.ParkingRequestIn;
+import com.utp.request.generated.model.ParkingRequestResubmitIn;
 import com.utp.request.model.entity.Request;
 import com.utp.request.service.RequestService;
-import com.utp.request.util.error.ErrorResponseHandler;
+import com.utp.request.util.security.AuthenticatedUserProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -17,6 +18,8 @@ import reactor.test.StepVerifier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,7 +29,7 @@ class RequestApiImplementsTest {
   private RequestService requestService;
 
   @Mock
-  private ErrorResponseHandler errorResponseHandler;
+  private AuthenticatedUserProvider authenticatedUserProvider;
 
   @Mock
   private ServerWebExchange exchange;
@@ -36,33 +39,86 @@ class RequestApiImplementsTest {
 
   @Test
   void testCreateParkingRequest_Success() {
-    // Arrange
-    ParkingRequest parkingRequest = new ParkingRequest();
-    parkingRequest.setNumberPlate("HNC-234");
-    parkingRequest.setIdApplicant(1);
-    parkingRequest.setVehicleType(1);
-    parkingRequest.setIsNew(true);
+    ParkingRequestIn parkingRequest = new ParkingRequestIn()
+        .numberPlate("HNC-234")
+        .vehicleType(1);
 
     Request savedRequest = new Request();
     savedRequest.setIdRequest(1);
-    savedRequest.setNumberPlate("HNC-234");
 
-    when(requestService.saveNewRequest(any()))
-        .thenReturn(Mono.just(savedRequest));
+    when(authenticatedUserProvider.getAuthenticatedUserId()).thenReturn(Mono.just(10L));
+    when(requestService.saveNewRequest(eq(10L), any())).thenReturn(Mono.just(savedRequest));
 
-    // Act & Assert
     StepVerifier.create(controller.createParkingRequest(
-        "550e8400-e29b-41d4-a716-446655440000",
-        "2025-01-10T14:02:03.987-0500",
-        "P0",
-        "atlas-cross-services",
-        Mono.just(parkingRequest),
-        exchange))
+            "550e8400-e29b-41d4-a716-446655440000",
+            "2025-01-10T14:02:03.987-0500",
+            "P0",
+            "atlas-cross-services",
+            Mono.just(parkingRequest),
+            exchange))
         .assertNext(response -> {
           assertEquals(HttpStatus.CREATED, response.getStatusCode());
           assertNotNull(response.getBody());
           assertEquals(1, response.getBody().getParkingRequestId());
         })
+        .verifyComplete();
+  }
+
+  @Test
+  void testResubmitParkingRequest_Success() {
+    ParkingRequestResubmitIn resubmitIn = new ParkingRequestResubmitIn().observation("Documentación corregida");
+
+    Request savedRequest = new Request();
+    savedRequest.setIdRequest(1);
+
+    when(authenticatedUserProvider.getAuthenticatedUserId()).thenReturn(Mono.just(10L));
+    when(requestService.resubmitRequest(eq(10L), eq(1), any())).thenReturn(Mono.just(savedRequest));
+
+    StepVerifier.create(controller.resubmitParkingRequest(
+            "550e8400-e29b-41d4-a716-446655440000",
+            "2025-01-10T14:02:03.987-0500",
+            "P0",
+            "atlas-cross-services",
+            1,
+            Mono.just(resubmitIn),
+            exchange))
+        .assertNext(response -> {
+          assertEquals(HttpStatus.OK, response.getStatusCode());
+          assertNotNull(response.getBody());
+          assertEquals(1, response.getBody().getParkingRequestId());
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingRequestsByAcceptor_DelegatesToService() {
+    when(requestService.getParkingRequestsByAcceptor(anyInt()))
+        .thenReturn(Mono.just(new com.utp.request.generated.model.ParkingRequestInformationList()));
+
+    StepVerifier.create(controller.getParkingRequestsByAcceptor(
+            "550e8400-e29b-41d4-a716-446655440000",
+            "2025-01-10T14:02:03.987-0500",
+            "P0",
+            "atlas-cross-services",
+            20,
+            exchange))
+        .assertNext(response -> assertEquals(HttpStatus.OK, response.getStatusCode()))
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingRequestsByApplicant_DelegatesToService() {
+    when(requestService.getParkingRequestsByApplicant(anyInt()))
+        .thenReturn(Mono.just(new com.utp.request.generated.model.ParkingRequestInformationList()));
+
+    StepVerifier.create(controller.getParkingRequestsByApplicant(
+            "550e8400-e29b-41d4-a716-446655440000",
+            "2025-01-10T14:02:03.987-0500",
+            "P0",
+            "atlas-cross-services",
+            10,
+            exchange))
+        .assertNext(response -> assertEquals(HttpStatus.OK, response.getStatusCode()))
         .verifyComplete();
   }
 }
