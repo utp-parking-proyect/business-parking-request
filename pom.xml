@@ -83,11 +83,6 @@
             <version>2.1.0</version>
         </dependency>
         <dependency>
-            <groupId>org.openapitools</groupId>
-            <artifactId>jackson-databind-nullable</artifactId>
-            <version>0.2.2</version>
-        </dependency>
-        <dependency>
             <groupId>javax.validation</groupId>
             <artifactId>validation-api</artifactId>
             <version>2.0.1.Final</version>
@@ -153,19 +148,6 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
-            <!--plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <mainClass>com.utp.request.BusinessParkingRequestApplication</mainClass>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
-            </plugin-->
             <plugin>
                 <groupId>org.openapitools</groupId>
                 <artifactId>openapi-generator-maven-plugin</artifactId>
@@ -191,6 +173,7 @@
                                 <reactive>true</reactive>
                                 <interfaceOnly>true</interfaceOnly>
                                 <skipFormModel>false</skipFormModel>
+                                <openApiNullable>false</openApiNullable>
                             </configOptions>
                             <globalProperties>
                                 <property key="apis">true</property>
@@ -219,6 +202,7 @@
                                 <dateLibrary>java8</dateLibrary>
                                 <interfaceOnly>true</interfaceOnly>
                                 <useBeanValidation>true</useBeanValidation>
+                                <openApiNullable>false</openApiNullable>
                             </configOptions>
                             <globalProperties>
                                 <property key="apis">false</property>

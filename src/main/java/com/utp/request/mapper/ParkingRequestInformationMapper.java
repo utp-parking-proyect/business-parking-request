@@ -12,16 +12,9 @@ import com.utp.request.model.entity.VehicleType;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
-import org.openapitools.jackson.nullable.JsonNullable;
-
-import java.time.LocalDateTime;
 
 @Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
 public interface ParkingRequestInformationMapper {
-
-  default JsonNullable<String> map(LocalDateTime value) {
-    return JsonNullable.of(value == null ? null : value.toString());
-  }
 
   @Mapping(target = "numberPlate", source = "vehicle.numberPlate")
   @Mapping(target = "vehicleType", source = "vehicleType.nameVehicleType")
