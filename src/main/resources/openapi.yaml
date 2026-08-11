@@ -1,0 +1,634 @@
+openapi: 3.0.1
+info:
+  title: API BS UTP Parking V1
+  description: 'Permite registrar las solicitudes de usuarios para contar con el beneficio de usar los estacionamientos de la UTP.'
+  version: 1.0.0
+servers:
+  - url: /utp-parking/v1
+externalDocs:
+  url: 'https://github.com/utp-parking-proyect'
+  description: Organización de Github
+tags:
+  - name: Request Controller
+    description: Parking request data controller¨
+  - name: Response Controller
+    description: Parking response data controller
+paths:
+  /request/acceptor/{acceptorId}:
+    get:
+      operationId: getParkingRequestsByAcceptor
+      summary: Obtiene todas las solicitudes de ingreso a estacionamiento de la UTP por aceptante.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Esta endpoint obtiene todas las solicitudes de ingreso al estacionamiento, enviadas por los canales web y móvil.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Request Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: acceptorId
+          in: path
+          description: ID del aceptante.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Listado de solicitudes de estacionamiento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingRequestInformationList'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El recurso solicitado no fue encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /request/applicant/{applicantId}:
+    get:
+      operationId: getParkingRequestsByApplicant
+      summary: Obtiene todas las solicitudes de ingreso a estacionamiento de la UTP realizadas por un usuario.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Este endpoint obtiene todas las solicitudes de estacionamiento registradas por un usuario (solicitante), a través de los vehículos que le pertenecen.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Request Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: applicantId
+          in: path
+          description: ID del usuario solicitante.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Listado de solicitudes de estacionamiento del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingRequestInformationList'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El recurso solicitado no fue encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /request:
+    post:
+      operationId: createParkingRequest
+      summary: Registra solicitudes de ingreso a estacionamiento de la UTP.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Esta API recibe la solicitud para la creación de una solicitud de ingreso al estacionamiento, enviadas por los canales web y móvil. El solicitante se determina a partir del usuario autenticado, no del cuerpo de la petición.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Request Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParkingRequestIn'
+        required: true
+      responses:
+        '201':
+          description: Proceso de Registro Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingRequestOut'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El recurso solicitado no fue encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /request/{requestId}/resubmit:
+    post:
+      operationId: resubmitParkingRequest
+      summary: Reenvía una solicitud rechazada de ingreso a estacionamiento de la UTP para una nueva revisión.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Permite que el propietario de una solicitud en estado RECHAZADO la reenvíe para una nueva revisión, conservando el mismo identificador de solicitud, vehículo y ciclo. Genera nuevas entradas en el historial de workflow.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Request Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: requestId
+          in: path
+          description: ID de la solicitud a reenviar.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Entrada del Servicio.
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParkingRequestResubmitIn'
+      responses:
+        '200':
+          description: Proceso de Reingreso Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingRequestOut'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El recurso solicitado no fue encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: La solicitud no se encuentra en un estado válido para ser reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /response/{requestId}:
+    patch:
+      operationId: respondToParkingRequest
+      summary: Registra la respuesta de Personal SAE a una solicitud de ingreso a estacionamiento de la UTP.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Esta API permite que el Personal SAE asignado como aceptante apruebe o rechace una solicitud de ingreso al estacionamiento.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Response Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: requestId
+          in: path
+          description: ID de la solicitud.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParkingResponseIn'
+        required: true
+      responses:
+        '200':
+          description: Proceso de Respuesta Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingResponseOut'
+        '400':
+          description: Los datos proporcionados no son válidos, o falta el comentario requerido al rechazar la solicitud.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El usuario autenticado no tiene el rol ROLE_SAE, o no es el aceptante asignado a la solicitud.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: La solicitud indicada no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: La solicitud no se encuentra en un estado que permita ser respondida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+components:
+  schemas:
+    ParkingRequestInformation:
+      type: object
+      properties:
+        idRequest:
+          type: integer
+          description: Identificador de la solicitud
+          example: 1
+        Applicant:
+          $ref: '#/components/schemas/ApplicantInformation'
+        Vehicle:
+          $ref: '#/components/schemas/VehicleInformation'
+        dateRequest:
+          type: string
+          description: Fecha de la solicitud.
+          example: '2024-06-01T10:00:00Z'
+        dateResponse:
+          type: string
+          description: Fecha de la respuesta de la solicitud, si ya fue atendida.
+          example: '2024-06-02T10:00:00Z'
+          nullable: true
+        status:
+          type: string
+          description: Estado de la solicitud.
+          example: Aprobada
+    VehicleInformation:
+      type: object
+      properties:
+        vehicleType:
+          type: string
+          description: Tipo del vehículo.
+          example: Motocicleta
+        numberPlate:
+          type: string
+          description: Placa del vehículo.
+          example: HNC-234
+    ApplicantInformation:
+      type: object
+      properties:
+        idApplicant:
+          type: integer
+          description: Identificador del solicitante.
+          example: 1
+        nameApplicant:
+          type: string
+          description: Nombre del solicitante.
+          example: Juan
+        lastNameApplicant:
+          type: string
+          description: Apellido del solicitante.
+          example: Pérez
+        usernameApplicant:
+          type: string
+          description: Nombre de usuario del solicitante.
+          example: U23201703
+        numberCycle:
+          type: string
+          description: Número de ciclo de la solicitud.
+          example: 2024-1
+    ParkingResponseIn:
+      type: object
+      required:
+        - approved
+      properties:
+        approved:
+          type: boolean
+          description: Indica si la solicitud fue aprobada o rechazada por Personal SAE.
+          example: true
+        comment:
+          type: string
+          description: Comentario del Personal SAE sobre la solicitud. Es obligatorio cuando approved es false.
+          example: La documentación presentada no es válida.
+    ParkingResponseOut:
+      type: object
+      properties:
+        approved:
+          type: boolean
+          description: Indica si la solicitud fue aprobada o rechazada.
+          example: true
+        comment:
+          type: string
+          description: Comentario sobre la solicitud.
+          example: Solicitud aprobada correctamente.
+        statusId:
+          type: integer
+          description: Identificador del nuevo estado de la solicitud.
+          example: 3
+    ParkingRequestIn:
+      type: object
+      required:
+        - numberPlate
+      properties:
+        vehicleType:
+          type: integer
+          description: Tipo del vehículo. Requerido únicamente si la placa no está asociada a un vehículo existente.
+          example: 1
+        numberPlate:
+          type: string
+          description: Placa del vehículo.
+          example: HNC-234
+    ParkingRequestResubmitIn:
+      type: object
+      properties:
+        observation:
+          type: string
+          description: Observación del reingreso de la solicitud.
+          example: Documentación corregida y solicitud reenviada.
+    ParkingRequestOut:
+      type: object
+      properties:
+        parkingRequestId:
+          type: integer
+          description: Identificador de la solicitud
+          example: 1
+    ParkingRequestInformationList:
+      type: object
+      properties:
+        parkingRequests:
+          type: array
+          description: Lista de solicitudes de ingreso al estacionamiento.
+          items:
+            $ref: '#/components/schemas/ParkingRequestInformation'
+    ApiException:
+      title: ApiException
+      type: object
+      properties:
+        description:
+          type: string
+          description: Descripcion del error de Sistema
+          example: Error al llamar al servicio
+        errorType:
+          type: string
+          description: Tipo de Error de Sistema
+          example: TECHNICAL
+        exceptionDetails:
+          type: array
+          description: Lista de detalles del error
+          items:
+            $ref: '#/components/schemas/ApiExceptionDetail'
+        properties:
+          type: object
+          properties: {}
+          description: Lista de propiedades especiales.
+      description: Datos del error de sistema.
+    ApiExceptionDetail:
+      title: ApiExceptionDetail
+      type: object
+      properties:
+        component:
+          type: string
+          description: Nombre del componente de falla
+          example: business-parking-request
+        description:
+          type: string
+          description: Descripcion del Detalle
+          example: Date is not within the valid range for any cycle
+      description: Datos del error técnico.
+  parameters:
+    Request-ID:
+      name: Request-ID
+      in: header
+      description: Este campo es un valor estandar ya existente y sera usado como identificador.
+      required: true
+      schema:
+        maxLength: 36
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[34][0-9a-fA-F]{3}-[89ab][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+        type: string
+        example: 550e8400-e29b-41d4-a716-446655440000
+    request-date:
+      name: request-date
+      in: header
+      description: Fecha de la petición
+      required: true
+      schema:
+        maxLength: 29
+        pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}([a-z]|[A-Z]|\d)?$'
+        type: string
+        example: '2020-10-09T14:02:03.987-0700'
+    app-code:
+      name: app-code
+      in: header
+      description: 'Codigo de la aplicacion que invoca el servicio. Se debe usar el codigo de 2 caracteres que tienen asignada las aplicaciones, puede ser el canal.'
+      required: true
+      schema:
+        maxLength: 2
+        minLength: 2
+        pattern: '^[0-9A-Z]*$'
+        type: string
+        example: P0
+    caller-name:
+      name: caller-name
+      in: header
+      description: Nombre de la API que realiza la invocacion al servicio.
+      required: true
+      schema:
+        maxLength: 100
+        minLength: 5
+        pattern: '^[0-9a-zA-Z.-]*$'
+        type: string
+        example: business-utp-parking-response-v1
+  securitySchemes:
+    bearerAuth:
+      type: http
+      description: 'Token de Authorización, header Authorization, ejemplo: Bearer 363536363jjxnj63633611'
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
