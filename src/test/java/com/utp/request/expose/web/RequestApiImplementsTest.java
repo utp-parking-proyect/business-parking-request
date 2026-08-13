@@ -92,7 +92,8 @@ class RequestApiImplementsTest {
 
   @Test
   void testGetParkingRequestsByAcceptor_DelegatesToService() {
-    when(requestService.getParkingRequestsByAcceptor(anyInt()))
+    when(authenticatedUserProvider.getAuthenticatedUserId()).thenReturn(Mono.just(20L));
+    when(requestService.getParkingRequestsByAcceptor(eq(20L), anyInt()))
         .thenReturn(Mono.just(new com.utp.request.generated.model.ParkingRequestInformationList()));
 
     StepVerifier.create(controller.getParkingRequestsByAcceptor(
@@ -108,7 +109,8 @@ class RequestApiImplementsTest {
 
   @Test
   void testGetParkingRequestsByApplicant_DelegatesToService() {
-    when(requestService.getParkingRequestsByApplicant(anyInt()))
+    when(authenticatedUserProvider.getAuthenticatedUserId()).thenReturn(Mono.just(10L));
+    when(requestService.getParkingRequestsByApplicant(eq(10L), anyInt()))
         .thenReturn(Mono.just(new com.utp.request.generated.model.ParkingRequestInformationList()));
 
     StepVerifier.create(controller.getParkingRequestsByApplicant(

@@ -11,11 +11,13 @@ import com.utp.request.model.entity.Request;
 import com.utp.request.model.entity.Status;
 import com.utp.request.model.entity.Vehicle;
 import com.utp.request.model.entity.VehicleType;
+import com.utp.request.model.entity.Workflow;
 import com.utp.request.repository.RequestRepository;
 import com.utp.request.repository.StatusRepository;
 import com.utp.request.repository.VehicleRepository;
 import com.utp.request.repository.VehicleTypeRepository;
 import com.utp.request.repository.WorkflowRepository;
+import com.utp.request.util.Constants;
 import com.utp.request.util.error.ConflictException;
 import com.utp.request.util.error.ForbiddenException;
 import com.utp.request.util.error.NotFoundException;
@@ -32,12 +34,14 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +49,7 @@ class RequestServiceImplTest {
 
   private static final String CURRENT_CYCLE_NAME = "2026-1";
   private static final Long APPLICANT_ID = 10L;
+  private static final Long ACCEPTOR_ID = 20L;
   private static final Long CAMPUS_ID = 7L;
 
   @Mock
@@ -166,6 +171,97 @@ class RequestServiceImplTest {
   }
 
   @Test
+  void testSaveNewRequest_NewMotorcycle_AcceptsTwoFourPlate() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("MA-1234").vehicleType(2);
+    Vehicle createdVehicle = vehicle(100, 10);
+    createdVehicle.setIdVehicleType(2);
+    createdVehicle.setNumberPlate("MA-1234");
+    Request finalRequest = request(200, 100, 5, 2);
+    finalRequest.setIdAcceptor(20);
+
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("MA-1234")).thenReturn(Mono.empty());
+    when(vehicleRepository.insertVehicle(2, 10, "MA-1234")).thenReturn(Mono.just(100));
+    when(vehicleRepository.findById(100)).thenReturn(Mono.just(createdVehicle));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 5)).thenReturn(Mono.empty());
+    when(requestRepository.insertRequest(any(), any(), any(), any())).thenReturn(Mono.just(200));
+    when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
+    when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(1L));
+    when(requestRepository.updateAcceptorAndStatus(200, 20, 2)).thenReturn(Mono.empty());
+    when(requestRepository.findById(200)).thenReturn(Mono.just(finalRequest));
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .assertNext(saved -> assertEquals(200, saved.getIdRequest()))
+        .verifyComplete();
+  }
+
+  @Test
+  void testSaveNewRequest_MotorcycleWithCarPlate_IsInvalid() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(2);
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.empty());
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .expectErrorMatches(error -> error instanceof IllegalArgumentException
+            && error.getMessage().equals(Constants.ERROR_INVALID_NUMBER_PLATE_MOTORCYCLE))
+        .verify();
+
+    Mockito.verify(vehicleRepository, Mockito.never()).insertVehicle(anyInt(), anyInt(), any());
+  }
+
+  @Test
+  void testSaveNewRequest_CarWithMotorcyclePlate_IsInvalid() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("MA-1234").vehicleType(1);
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("MA-1234")).thenReturn(Mono.empty());
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .expectErrorMatches(error -> error instanceof IllegalArgumentException
+            && error.getMessage().equals(Constants.ERROR_INVALID_NUMBER_PLATE_CAR))
+        .verify();
+
+    Mockito.verify(vehicleRepository, Mockito.never()).insertVehicle(anyInt(), anyInt(), any());
+  }
+
+  @Test
+  void testSaveNewRequest_NewVehicleWithoutVehicleType_IsInvalid() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234");
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.empty());
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .expectErrorMatches(error -> error instanceof IllegalArgumentException
+            && error.getMessage().equals(Constants.ERROR_VEHICLE_TYPE_REQUIRED))
+        .verify();
+
+    Mockito.verify(vehicleRepository, Mockito.never()).insertVehicle(anyInt(), anyInt(), any());
+  }
+
+  @Test
+  void testSaveNewRequest_ExistingMotorcycleWithCarPlate_SkipsPlateValidation() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234");
+    Vehicle existingVehicle = vehicle(100, 10);
+    existingVehicle.setIdVehicleType(2);
+    Request finalRequest = request(200, 100, 5, 2);
+    finalRequest.setIdAcceptor(20);
+
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(existingVehicle));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 5)).thenReturn(Mono.empty());
+    when(requestRepository.insertRequest(any(), any(), any(), any())).thenReturn(Mono.just(200));
+    when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
+    when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(0L));
+    when(requestRepository.updateAcceptorAndStatus(200, 20, 2)).thenReturn(Mono.empty());
+    when(requestRepository.findById(200)).thenReturn(Mono.just(finalRequest));
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .assertNext(saved -> assertEquals(200, saved.getIdRequest()))
+        .verifyComplete();
+  }
+
+  @Test
   void testSaveNewRequest_VehicleOwnedByAnotherUser_IsForbidden() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
     when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
@@ -239,7 +335,7 @@ class RequestServiceImplTest {
     when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(requestRepository.findById(200)).thenReturn(Mono.just(existing), Mono.just(finalRequest));
     when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 10)));
-    when(requestRepository.updateStatusAndResponse(200, 1, null)).thenReturn(Mono.empty());
+    when(requestRepository.updateStatusAndResponse(200, 5, null)).thenReturn(Mono.empty());
     when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
     when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
     when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(0L));
@@ -250,6 +346,8 @@ class RequestServiceImplTest {
         .verifyComplete();
 
     Mockito.verify(requestRepository, Mockito.never()).insertRequest(anyInt(), anyInt(), anyInt(), any());
+    Mockito.verify(workflowRepository)
+        .saveWorkflow(eq(200), eq(5), any(), eq("Documentación corregida"));
   }
 
   @Test
@@ -319,7 +417,7 @@ class RequestServiceImplTest {
     when(portalServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
     when(vehicleTypeRepository.findAllById(Set.of(1))).thenReturn(Flux.just(vehicleType));
 
-    StepVerifier.create(requestService.getParkingRequestsByAcceptor(20))
+    StepVerifier.create(requestService.getParkingRequestsByAcceptor(ACCEPTOR_ID, 20))
         .assertNext(list -> {
           assert list.getParkingRequests().size() == 1;
           assert list.getParkingRequests().get(0).getIdRequest().equals(200);
@@ -337,7 +435,7 @@ class RequestServiceImplTest {
     when(portalServiceClient.getUserById(20L)).thenReturn(Mono.just(notSae));
     when(portalServiceClient.hasSaeRole(notSae)).thenReturn(false);
 
-    StepVerifier.create(requestService.getParkingRequestsByAcceptor(20))
+    StepVerifier.create(requestService.getParkingRequestsByAcceptor(ACCEPTOR_ID, 20))
         .expectError(ForbiddenException.class)
         .verify();
   }
@@ -346,9 +444,19 @@ class RequestServiceImplTest {
   void testGetParkingRequestsByAcceptor_AcceptorNotFound() {
     when(portalServiceClient.getUserById(20L)).thenReturn(Mono.empty());
 
-    StepVerifier.create(requestService.getParkingRequestsByAcceptor(20))
+    StepVerifier.create(requestService.getParkingRequestsByAcceptor(ACCEPTOR_ID, 20))
         .expectError(NotFoundException.class)
         .verify();
+  }
+
+  @Test
+  void testGetParkingRequestsByAcceptor_OtherAcceptor_IsForbidden() {
+    StepVerifier.create(requestService.getParkingRequestsByAcceptor(ACCEPTOR_ID, 21))
+        .expectError(ForbiddenException.class)
+        .verify();
+
+    Mockito.verify(portalServiceClient, Mockito.never()).getUserById(21L);
+    Mockito.verify(requestRepository, Mockito.never()).findAllByIdAcceptor(anyInt());
   }
 
   @Test
@@ -369,7 +477,7 @@ class RequestServiceImplTest {
     when(portalServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
     when(vehicleTypeRepository.findAllById(Set.of(1))).thenReturn(Flux.just(vehicleType));
 
-    StepVerifier.create(requestService.getParkingRequestsByApplicant(10))
+    StepVerifier.create(requestService.getParkingRequestsByApplicant(APPLICANT_ID, 10))
         .assertNext(list -> {
           assert list.getParkingRequests().size() == 1;
           assert list.getParkingRequests().get(0).getIdRequest().equals(200);
@@ -382,8 +490,106 @@ class RequestServiceImplTest {
   void testGetParkingRequestsByApplicant_ApplicantNotFound() {
     when(portalServiceClient.getUserById(10L)).thenReturn(Mono.empty());
 
-    StepVerifier.create(requestService.getParkingRequestsByApplicant(10))
+    StepVerifier.create(requestService.getParkingRequestsByApplicant(APPLICANT_ID, 10))
         .expectError(NotFoundException.class)
         .verify();
+  }
+
+  @Test
+  void testGetParkingRequestById_ApplicantSeesWorkflowObservations() {
+    Request req = request(200, 100, 5, 4);
+    req.setIdAcceptor(20);
+
+    Status rejected = new Status();
+    rejected.setIdStatus(4);
+    rejected.setNameStatus("Rechazada");
+
+    VehicleType vehicleType = new VehicleType();
+    vehicleType.setIdVehicleType(1);
+    vehicleType.setNameVehicleType("Motocicleta");
+
+    Workflow entry = new Workflow();
+    entry.setIdWorkflow(1);
+    entry.setIdRequest(200);
+    entry.setIdStatus(4);
+    entry.setDateStatusChange(LocalDateTime.of(2026, 6, 2, 10, 0));
+    entry.setObservation("La documentación presentada no es válida.");
+
+    when(requestRepository.findById(200)).thenReturn(Mono.just(req));
+    when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 10)));
+    when(vehicleRepository.findAllById(Set.of(100))).thenReturn(Flux.just(vehicle(100, 10)));
+    when(statusRepository.findAllById(Set.of(4))).thenReturn(Flux.just(rejected));
+    when(portalServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
+    when(vehicleTypeRepository.findAllById(Set.of(1))).thenReturn(Flux.just(vehicleType));
+    when(workflowRepository.findAllByRequestId(200)).thenReturn(Flux.just(entry));
+
+    StepVerifier.create(requestService.getParkingRequestById(APPLICANT_ID, 200))
+        .assertNext(detail -> {
+          assertEquals("Rechazada", detail.getStatus());
+          assertEquals(1, detail.getWorkflow().size());
+          assertEquals("Rechazada", detail.getWorkflow().get(0).getStatus());
+          assertEquals("La documentación presentada no es válida.",
+              detail.getWorkflow().get(0).getObservation());
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingRequestById_AssignedAcceptorIsAllowed() {
+    Request req = request(200, 100, 5, 4);
+    req.setIdAcceptor(20);
+
+    Status rejected = new Status();
+    rejected.setIdStatus(4);
+    rejected.setNameStatus("Rechazada");
+
+    VehicleType vehicleType = new VehicleType();
+    vehicleType.setIdVehicleType(1);
+    vehicleType.setNameVehicleType("Motocicleta");
+
+    when(requestRepository.findById(200)).thenReturn(Mono.just(req));
+    when(vehicleRepository.findAllById(Set.of(100))).thenReturn(Flux.just(vehicle(100, 10)));
+    when(statusRepository.findAllById(Set.of(4))).thenReturn(Flux.just(rejected));
+    when(portalServiceClient.getCycleById(5L)).thenReturn(Mono.just(cycle(5)));
+    when(vehicleTypeRepository.findAllById(Set.of(1))).thenReturn(Flux.just(vehicleType));
+    when(workflowRepository.findAllByRequestId(200)).thenReturn(Flux.empty());
+
+    StepVerifier.create(requestService.getParkingRequestById(ACCEPTOR_ID, 200))
+        .assertNext(detail -> assertEquals(200, detail.getIdRequest()))
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingRequestById_StrangerIsForbidden() {
+    Request req = request(200, 100, 5, 4);
+    req.setIdAcceptor(20);
+
+    when(requestRepository.findById(200)).thenReturn(Mono.just(req));
+    when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 10)));
+
+    StepVerifier.create(requestService.getParkingRequestById(99L, 200))
+        .expectError(ForbiddenException.class)
+        .verify();
+
+    Mockito.verify(workflowRepository, Mockito.never()).findAllByRequestId(anyInt());
+  }
+
+  @Test
+  void testGetParkingRequestById_NotFound() {
+    when(requestRepository.findById(404)).thenReturn(Mono.empty());
+
+    StepVerifier.create(requestService.getParkingRequestById(APPLICANT_ID, 404))
+        .expectError(NotFoundException.class)
+        .verify();
+  }
+
+  @Test
+  void testGetParkingRequestsByApplicant_OtherApplicant_IsForbidden() {
+    StepVerifier.create(requestService.getParkingRequestsByApplicant(APPLICANT_ID, 11))
+        .expectError(ForbiddenException.class)
+        .verify();
+
+    Mockito.verify(portalServiceClient, Mockito.never()).getUserById(11L);
+    Mockito.verify(requestRepository, Mockito.never()).findAllByApplicantUserId(anyInt());
   }
 }
