@@ -5,10 +5,12 @@ import com.utp.request.generated.client.users.model.UserResponse;
 import com.utp.request.generated.model.ApplicantInformation;
 import com.utp.request.generated.model.ParkingRequestInformation;
 import com.utp.request.generated.model.VehicleInformation;
+import com.utp.request.generated.model.WorkflowEntry;
 import com.utp.request.model.entity.Request;
 import com.utp.request.model.entity.Status;
 import com.utp.request.model.entity.Vehicle;
 import com.utp.request.model.entity.VehicleType;
+import com.utp.request.model.entity.Workflow;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
@@ -26,6 +28,11 @@ public interface ParkingRequestInformationMapper {
   @Mapping(target = "usernameApplicant", source = "applicant.username")
   @Mapping(target = "numberCycle", source = "cycle.nameCycle")
   ApplicantInformation toApplicantInformation(UserResponse applicant, CycleResponse cycle);
+
+  @Mapping(target = "status", source = "status.nameStatus")
+  @Mapping(target = "dateStatusChange", source = "workflow.dateStatusChange")
+  @Mapping(target = "observation", source = "workflow.observation")
+  WorkflowEntry toWorkflowEntry(Workflow workflow, Status status);
 
   @Mapping(target = "idRequest", source = "request.idRequest")
   @Mapping(target = "applicant", source = "applicantInformation")

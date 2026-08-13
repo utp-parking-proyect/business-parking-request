@@ -5,6 +5,7 @@ import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -20,4 +21,11 @@ public interface WorkflowRepository extends R2dbcRepository<Workflow, Integer> {
                           @Param("statusId") Integer statusId,
                           @Param("dateStatusChange") LocalDateTime dateStatusChange,
                           @Param("observation") String observation);
+
+  @Query(value = """
+      SELECT * FROM workflow
+      WHERE id_request = :requestId
+      ORDER BY date_status_change, id_workflow;
+      """)
+  Flux<Workflow> findAllByRequestId(@Param("requestId") Integer requestId);
 }

@@ -1,5 +1,7 @@
 package com.utp.request.util.security;
 
+import com.utp.request.util.Constants;
+import com.utp.request.util.error.ForbiddenException;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
@@ -10,12 +12,14 @@ import java.util.Objects;
 @Component
 public class AuthenticatedUserProvider {
 
+  private static final String CLAIM_USER_ID = "userId";
+
   public Mono<Long> getAuthenticatedUserId() {
     return ReactiveSecurityContextHolder.getContext()
         .map(context -> Objects.requireNonNull(context.getAuthentication()).getPrincipal())
         .cast(Jwt.class)
-        .map(jwt -> jwt.getClaim("userId"))
-        .cast(Number.class)
-        .map(Number::longValue);
+        .mapNotNull(jwt -> (Number) jwt.getClaim(CLAIM_USER_ID))
+        .map(Number::longValue)
+        .switchIfEmpty(Mono.error(new ForbiddenException(Constants.ERROR_MISSING_USER_ID)));
   }
 }
