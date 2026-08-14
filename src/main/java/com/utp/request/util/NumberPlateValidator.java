@@ -1,6 +1,7 @@
 package com.utp.request.util;
 
 import lombok.experimental.UtilityClass;
+import reactor.core.publisher.Mono;
 
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -13,6 +14,26 @@ public final class NumberPlateValidator {
 
   public static boolean isMotorcycle(Integer idVehicleType) {
     return Constants.ID_VEHICLE_TYPES_MOTORCYCLE.contains(idVehicleType);
+  }
+
+  public static String normalize(String numberPlate) {
+    return numberPlate == null ? null : numberPlate.trim().toUpperCase(Locale.ROOT);
+  }
+
+  public static Mono<Void> validate(String numberPlate, Integer idVehicleType) {
+    if (idVehicleType == null) {
+      return Mono.error(new IllegalArgumentException(Constants.ERROR_VEHICLE_TYPE_REQUIRED));
+    }
+
+    if (isMotorcycle(idVehicleType)) {
+      return matchesMotorcyclePlate(numberPlate)
+          ? Mono.empty()
+          : Mono.error(new IllegalArgumentException(Constants.ERROR_INVALID_NUMBER_PLATE_MOTORCYCLE));
+    }
+
+    return matchesCarPlate(numberPlate)
+        ? Mono.empty()
+        : Mono.error(new IllegalArgumentException(Constants.ERROR_INVALID_NUMBER_PLATE_CAR));
   }
 
   public static boolean matchesCarPlate(String numberPlate) {

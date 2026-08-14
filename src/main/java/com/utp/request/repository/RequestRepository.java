@@ -55,4 +55,12 @@ public interface RequestRepository extends R2dbcRepository<Request, Integer> {
       WHERE v.id_user = :userId;
       """)
   Flux<Request> findAllByApplicantUserId(@Param("userId") Integer userId);
+
+  @Query(value = """
+      SELECT COUNT(*) FROM requests r
+      JOIN vehicles v ON v.id_vehicle = r.id_vehicle
+      WHERE v.id_user = :userId AND r.id_cycle = :idCycle;
+      """)
+  Mono<Long> countByApplicantUserIdAndIdCycle(@Param("userId") Integer userId,
+                                              @Param("idCycle") Integer idCycle);
 }

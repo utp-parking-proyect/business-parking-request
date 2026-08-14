@@ -22,6 +22,9 @@ public final class Constants {
   public static final Integer ID_STATUS_REJECTED = 4;
   public static final Integer ID_STATUS_RESUBMITTED = 5;
 
+  public static final Integer MAX_VEHICLES_PER_USER = 5;
+  public static final Integer MAX_REQUESTS_PER_CYCLE = 2;
+
   public static final String ROLE_NAME_SAE = "ROLE_SAE";
 
   public static final String NAME_MICROSERVICE = "business-parking-request";
@@ -38,6 +41,19 @@ public final class Constants {
       "La placa de un automóvil o camioneta debe tener el formato ABC-123 (3-3 caracteres)";
   public static final String ERROR_INVALID_NUMBER_PLATE_MOTORCYCLE =
       "La placa de una motocicleta debe tener el formato AB-1234 (2-4 caracteres)";
+  public static final String ERROR_VEHICLE_ACTIVE_REQUIRED =
+      "Debe indicar si el vehículo estará disponible para nuevas solicitudes";
+  public static final String ERROR_VEHICLE_NOT_FOUND = "El vehículo no existe";
+  public static final String ERROR_VEHICLE_NOT_OWNED =
+      "No tienes permisos para modificar este vehículo";
+  public static final String ERROR_VEHICLE_INACTIVE =
+      "El vehículo seleccionado está deshabilitado y no puede utilizarse en nuevas solicitudes";
+  public static final String ERROR_VEHICLE_ALREADY_REGISTERED =
+      "Ya tienes registrado un vehículo con esta placa";
+  public static final String ERROR_MAX_VEHICLES_REACHED =
+      "Has alcanzado el máximo de " + MAX_VEHICLES_PER_USER + " vehículos registrados";
+  public static final String ERROR_MAX_REQUESTS_PER_CYCLE_REACHED =
+      "Has alcanzado el máximo de " + MAX_REQUESTS_PER_CYCLE + " solicitudes para este ciclo";
   public static final String ERROR_REQUEST_ALREADY_EXISTS =
       "Ya existe una solicitud para este vehículo en el ciclo actual";
   public static final String ERROR_REQUEST_REJECTED_USE_RESUBMIT =

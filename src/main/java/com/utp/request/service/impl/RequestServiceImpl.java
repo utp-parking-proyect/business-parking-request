@@ -69,9 +69,20 @@ public class RequestServiceImpl implements RequestService {
 
   private Mono<Request> createRequestForCycle(Integer userId, ParkingRequestIn request, Integer idCycle,
                                               Long idCampus) {
-    return resolveVehicle(userId, request.getNumberPlate(), request.getVehicleType())
+    String numberPlate = NumberPlateValidator.normalize(request.getNumberPlate());
+
+    return validateRequestsPerCycleLimit(userId, idCycle)
+        .then(Mono.defer(() -> resolveVehicle(userId, numberPlate, request.getVehicleType())))
         .flatMap(vehicle -> validateNoActiveRequest(vehicle.getIdVehicle(), idCycle)
             .then(Mono.defer(() -> createRequestWithWorkflow(vehicle.getIdVehicle(), idCycle, idCampus))));
+  }
+
+  private Mono<Void> validateRequestsPerCycleLimit(Integer userId, Integer idCycle) {
+    return requestRepository.countByApplicantUserIdAndIdCycle(userId, idCycle)
+        .defaultIfEmpty(0L)
+        .flatMap(count -> count >= Constants.MAX_REQUESTS_PER_CYCLE
+            ? Mono.error(new ConflictException(Constants.ERROR_MAX_REQUESTS_PER_CYCLE_REACHED))
+            : Mono.empty());
   }
 
   @Override
@@ -205,27 +216,30 @@ public class RequestServiceImpl implements RequestService {
   private Mono<Vehicle> resolveVehicle(Integer userId, String numberPlate, Integer idVehicleType) {
     return vehicleRepository.findByNumberPlate(numberPlate)
         .flatMap(vehicle -> vehicle.getIdUser().equals(userId)
-            ? Mono.just(vehicle)
+            ? validateVehicleIsActive(vehicle)
             : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER)))
-        .switchIfEmpty(Mono.defer(() -> validateNumberPlate(numberPlate, idVehicleType)
-            .then(Mono.defer(() -> vehicleRepository.insertVehicle(idVehicleType, userId, numberPlate)))
-            .flatMap(vehicleRepository::findById)));
+        .switchIfEmpty(Mono.defer(() -> registerVehicle(userId, numberPlate, idVehicleType)));
   }
 
-  private Mono<Void> validateNumberPlate(String numberPlate, Integer idVehicleType) {
-    if (idVehicleType == null) {
-      return Mono.error(new IllegalArgumentException(Constants.ERROR_VEHICLE_TYPE_REQUIRED));
-    }
+  private Mono<Vehicle> registerVehicle(Integer userId, String numberPlate, Integer idVehicleType) {
+    return NumberPlateValidator.validate(numberPlate, idVehicleType)
+        .then(Mono.defer(() -> validateVehicleLimit(userId)))
+        .then(Mono.defer(() -> vehicleRepository.insertVehicle(idVehicleType, userId, numberPlate)))
+        .flatMap(vehicleRepository::findById);
+  }
 
-    if (NumberPlateValidator.isMotorcycle(idVehicleType)) {
-      return NumberPlateValidator.matchesMotorcyclePlate(numberPlate)
-          ? Mono.empty()
-          : Mono.error(new IllegalArgumentException(Constants.ERROR_INVALID_NUMBER_PLATE_MOTORCYCLE));
-    }
+  private Mono<Void> validateVehicleLimit(Integer userId) {
+    return vehicleRepository.countByIdUser(userId)
+        .defaultIfEmpty(0L)
+        .flatMap(registered -> registered >= Constants.MAX_VEHICLES_PER_USER
+            ? Mono.error(new ConflictException(Constants.ERROR_MAX_VEHICLES_REACHED))
+            : Mono.empty());
+  }
 
-    return NumberPlateValidator.matchesCarPlate(numberPlate)
-        ? Mono.empty()
-        : Mono.error(new IllegalArgumentException(Constants.ERROR_INVALID_NUMBER_PLATE_CAR));
+  private Mono<Vehicle> validateVehicleIsActive(Vehicle vehicle) {
+    return Boolean.FALSE.equals(vehicle.getActive())
+        ? Mono.error(new ConflictException(Constants.ERROR_VEHICLE_INACTIVE))
+        : Mono.just(vehicle);
   }
 
   private Mono<Void> validateNoActiveRequest(Integer idVehicle, Integer idCycle) {
@@ -246,16 +260,17 @@ public class RequestServiceImpl implements RequestService {
   }
 
   private Mono<Void> validateResubmit(Integer userId, Request existing, Integer currentIdCycle) {
-    return validateVehicleOwnership(userId, existing.getIdVehicle())
-        .then(Mono.defer(() -> validateCurrentCycle(existing.getIdCycle(), currentIdCycle)))
-        .then(Mono.defer(() -> validateRejectedStatus(existing.getIdStatus())));
+    return findOwnedVehicle(userId, existing.getIdVehicle())
+        .flatMap(vehicle -> validateCurrentCycle(existing.getIdCycle(), currentIdCycle)
+            .then(Mono.defer(() -> validateVehicleIsActive(vehicle)))
+            .then(Mono.defer(() -> validateRejectedStatus(existing.getIdStatus()))));
   }
 
-  private Mono<Void> validateVehicleOwnership(Integer userId, Integer idVehicle) {
+  private Mono<Vehicle> findOwnedVehicle(Integer userId, Integer idVehicle) {
     return vehicleRepository.findById(idVehicle)
         .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
         .flatMap(vehicle -> vehicle.getIdUser().equals(userId)
-            ? Mono.empty()
+            ? Mono.just(vehicle)
             : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER)));
   }
 
