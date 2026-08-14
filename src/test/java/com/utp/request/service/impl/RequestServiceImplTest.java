@@ -88,6 +88,14 @@ class RequestServiceImplTest {
         .thenReturn(Mono.just(applicant(APPLICANT_ID, CAMPUS_ID)));
   }
 
+  @BeforeEach
+  void mockLimitsWithinRange() {
+    Mockito.lenient().when(requestRepository.countByApplicantUserIdAndIdCycle(anyInt(), anyInt()))
+        .thenReturn(Mono.just(0L));
+    Mockito.lenient().when(vehicleRepository.countByIdUser(anyInt()))
+        .thenReturn(Mono.just(0L));
+  }
+
   private Vehicle vehicle(Integer idVehicle, Integer idUser) {
     Vehicle vehicle = new Vehicle();
     vehicle.setIdVehicle(idVehicle);
@@ -327,6 +335,147 @@ class RequestServiceImplTest {
   }
 
   @Test
+  void testSaveNewRequest_SecondRequestInCycle_IsAllowed() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("XYZ-456").vehicleType(1);
+    Vehicle secondVehicle = vehicle(101, 10);
+    secondVehicle.setNumberPlate("XYZ-456");
+    Request finalRequest = request(201, 101, 5, 2);
+    finalRequest.setIdAcceptor(20);
+
+    when(requestRepository.countByApplicantUserIdAndIdCycle(10, 5)).thenReturn(Mono.just(1L));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("XYZ-456")).thenReturn(Mono.just(secondVehicle));
+    when(requestRepository.findByIdVehicleAndIdCycle(101, 5)).thenReturn(Mono.empty());
+    when(requestRepository.insertRequest(any(), any(), any(), any())).thenReturn(Mono.just(201));
+    when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
+    when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(0L));
+    when(requestRepository.updateAcceptorAndStatus(201, 20, 2)).thenReturn(Mono.empty());
+    when(requestRepository.findById(201)).thenReturn(Mono.just(finalRequest));
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .assertNext(saved -> assertEquals(201, saved.getIdRequest()))
+        .verifyComplete();
+  }
+
+  @Test
+  void testSaveNewRequest_ThirdRequestInCycle_IsConflict() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("XYZ-456").vehicleType(1);
+
+    when(requestRepository.countByApplicantUserIdAndIdCycle(10, 5)).thenReturn(Mono.just(2L));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .expectErrorMatches(error -> error instanceof ConflictException
+            && error.getMessage().equals(Constants.ERROR_MAX_REQUESTS_PER_CYCLE_REACHED))
+        .verify();
+
+    Mockito.verify(vehicleRepository, Mockito.never()).insertVehicle(anyInt(), anyInt(), any());
+    Mockito.verify(requestRepository, Mockito.never()).insertRequest(anyInt(), anyInt(), anyInt(), any());
+    Mockito.verifyNoInteractions(workflowRepository);
+  }
+
+  @Test
+  void testSaveNewRequest_LimitIsScopedToTheCycle() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
+    Request finalRequest = request(202, 100, 6, 2);
+    finalRequest.setIdAcceptor(20);
+
+    Mockito.lenient().when(requestRepository.countByApplicantUserIdAndIdCycle(10, 5))
+        .thenReturn(Mono.just(2L));
+    when(requestRepository.countByApplicantUserIdAndIdCycle(10, 6)).thenReturn(Mono.just(0L));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(6)));
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle(100, 10)));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 6)).thenReturn(Mono.empty());
+    when(requestRepository.insertRequest(any(), any(), any(), any())).thenReturn(Mono.just(202));
+    when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
+    when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(0L));
+    when(requestRepository.updateAcceptorAndStatus(202, 20, 2)).thenReturn(Mono.empty());
+    when(requestRepository.findById(202)).thenReturn(Mono.just(finalRequest));
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .assertNext(saved -> assertEquals(202, saved.getIdRequest()))
+        .verifyComplete();
+  }
+
+  @Test
+  void testSaveNewRequest_InactiveVehicle_IsConflict() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
+    Vehicle inactiveVehicle = vehicle(100, 10);
+    inactiveVehicle.setActive(false);
+
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(inactiveVehicle));
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .expectErrorMatches(error -> error instanceof ConflictException
+            && error.getMessage().equals(Constants.ERROR_VEHICLE_INACTIVE))
+        .verify();
+
+    Mockito.verify(requestRepository, Mockito.never()).insertRequest(anyInt(), anyInt(), anyInt(), any());
+    Mockito.verifyNoInteractions(workflowRepository);
+  }
+
+  @Test
+  void testSaveNewRequest_ExistingVehicle_IsReusedWithoutDuplicating() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("hnc-234").vehicleType(1);
+    Request finalRequest = request(200, 100, 5, 2);
+    finalRequest.setIdAcceptor(20);
+
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle(100, 10)));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 5)).thenReturn(Mono.empty());
+    when(requestRepository.insertRequest(eq(100), any(), any(), any())).thenReturn(Mono.just(200));
+    when(workflowRepository.saveWorkflow(any(), any(), any(), any())).thenReturn(Mono.empty());
+    when(portalServiceClient.getEligibleAcceptors(CAMPUS_ID)).thenReturn(Flux.just(saeUser(20L)));
+    when(requestRepository.countByIdAcceptorAndIdStatus(20, 2)).thenReturn(Mono.just(0L));
+    when(requestRepository.updateAcceptorAndStatus(200, 20, 2)).thenReturn(Mono.empty());
+    when(requestRepository.findById(200)).thenReturn(Mono.just(finalRequest));
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .assertNext(saved -> assertEquals(100, saved.getIdVehicle()))
+        .verifyComplete();
+
+    Mockito.verify(vehicleRepository, Mockito.never()).insertVehicle(anyInt(), anyInt(), any());
+  }
+
+  @Test
+  void testSaveNewRequest_SixthVehicle_IsConflict() {
+    ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("XYZ-456").vehicleType(1);
+
+    when(vehicleRepository.countByIdUser(10)).thenReturn(Mono.just(5L));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(vehicleRepository.findByNumberPlate("XYZ-456")).thenReturn(Mono.empty());
+
+    StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
+        .expectErrorMatches(error -> error instanceof ConflictException
+            && error.getMessage().equals(Constants.ERROR_MAX_VEHICLES_REACHED))
+        .verify();
+
+    Mockito.verify(vehicleRepository, Mockito.never()).insertVehicle(anyInt(), anyInt(), any());
+    Mockito.verify(requestRepository, Mockito.never()).insertRequest(anyInt(), anyInt(), anyInt(), any());
+  }
+
+  @Test
+  void testResubmitRequest_InactiveVehicle_IsConflict() {
+    Request existing = request(200, 100, 5, 4);
+    Vehicle inactiveVehicle = vehicle(100, 10);
+    inactiveVehicle.setActive(false);
+
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(requestRepository.findById(200)).thenReturn(Mono.just(existing));
+    when(vehicleRepository.findById(100)).thenReturn(Mono.just(inactiveVehicle));
+
+    StepVerifier.create(requestService.resubmitRequest(APPLICANT_ID, 200, null))
+        .expectErrorMatches(error -> error instanceof ConflictException
+            && error.getMessage().equals(Constants.ERROR_VEHICLE_INACTIVE))
+        .verify();
+
+    Mockito.verify(requestRepository, Mockito.never()).updateStatusAndResponse(anyInt(), anyInt(), any());
+  }
+
+  @Test
   void testResubmitRequest_Rejected_KeepsSameRequestId() {
     Request existing = request(200, 100, 5, 4);
     Request finalRequest = request(200, 100, 5, 2);
@@ -380,7 +529,27 @@ class RequestServiceImplTest {
     when(vehicleRepository.findById(100)).thenReturn(Mono.just(vehicle(100, 10)));
 
     StepVerifier.create(requestService.resubmitRequest(APPLICANT_ID, 200, null))
-        .expectError(ConflictException.class)
+        .expectErrorMatches(error -> error instanceof ConflictException
+            && error.getMessage().equals(Constants.ERROR_REQUEST_WRONG_CYCLE))
+        .verify();
+
+    Mockito.verify(requestRepository, Mockito.never()).updateStatusAndResponse(anyInt(), anyInt(), any());
+    Mockito.verifyNoInteractions(workflowRepository);
+  }
+
+  @Test
+  void testResubmitRequest_RejectedInPreviousCycle_ReportsTheCycleNotTheVehicle() {
+    Request existing = request(200, 100, 5, 4);
+    Vehicle inactiveVehicle = vehicle(100, 10);
+    inactiveVehicle.setActive(false);
+
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(6)));
+    when(requestRepository.findById(200)).thenReturn(Mono.just(existing));
+    when(vehicleRepository.findById(100)).thenReturn(Mono.just(inactiveVehicle));
+
+    StepVerifier.create(requestService.resubmitRequest(APPLICANT_ID, 200, null))
+        .expectErrorMatches(error -> error instanceof ConflictException
+            && error.getMessage().equals(Constants.ERROR_REQUEST_WRONG_CYCLE))
         .verify();
   }
 

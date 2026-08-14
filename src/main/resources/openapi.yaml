@@ -13,6 +13,8 @@ tags:
     description: Parking request data controller¨
   - name: Response Controller
     description: Parking response data controller
+  - name: Vehicle Controller
+    description: Applicant vehicle data controller
 paths:
   /request/acceptor/{acceptorId}:
     get:
@@ -253,6 +255,8 @@ paths:
         ### Acerca de la funcionalidad expuesta
         Esta API recibe la solicitud para la creación de una solicitud de ingreso al estacionamiento, enviadas por los canales web y móvil. El solicitante se determina a partir del usuario autenticado, no del cuerpo de la petición.
 
+        Si la placa corresponde a un vehículo ya registrado por el usuario, se reutiliza ese vehículo; si no existe, se registra respetando el máximo de vehículos permitido. No se admiten vehículos deshabilitados ni solicitantes que hayan alcanzado el máximo de solicitudes del ciclo.
+
         ### Data de Prueba
         No aplica.
       tags:
@@ -410,6 +414,219 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiException'
+  /vehicles/me:
+    get:
+      operationId: getMyVehicles
+      summary: Obtiene los vehículos registrados por el usuario autenticado.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Devuelve los vehículos que el usuario autenticado tiene registrados, habilitados y deshabilitados, junto con la cantidad registrada y el máximo permitido. El propietario se determina a partir del usuario autenticado, no del cuerpo ni de la ruta de la petición.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Vehicle Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+      responses:
+        '200':
+          description: Listado de vehículos del usuario autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleDetailList'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /vehicles:
+    post:
+      operationId: registerVehicle
+      summary: Registra un vehículo para el usuario autenticado.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Registra un vehículo reutilizable que el usuario podrá seleccionar al crear solicitudes de ingreso al estacionamiento. El propietario se determina a partir del usuario autenticado. Un usuario no puede superar el máximo de vehículos registrados, contando los deshabilitados.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Vehicle Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleIn'
+        required: true
+      responses:
+        '201':
+          description: Proceso de Registro Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleDetail'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: La placa indicada pertenece a otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: El usuario alcanzó el máximo de vehículos registrados o ya tiene registrada la placa indicada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /vehicles/{vehicleId}:
+    patch:
+      operationId: updateVehicleAvailability
+      summary: Habilita o deshabilita un vehículo del usuario autenticado.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Modifica únicamente la disponibilidad del vehículo para nuevas solicitudes. Deshabilitar un vehículo no lo elimina ni afecta las solicitudes ni el historial de workflow ya registrados. Solo el propietario del vehículo puede ejecutar esta operación.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Vehicle Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: vehicleId
+          in: path
+          description: ID del vehículo.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleAvailabilityIn'
+        required: true
+      responses:
+        '200':
+          description: Proceso de Actualización Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleDetail'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El vehículo indicado pertenece a otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El vehículo indicado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
   /response/{requestId}:
     patch:
       operationId: respondToParkingRequest
@@ -533,6 +750,74 @@ components:
           type: string
           description: Placa del vehículo.
           example: HNC-234
+    VehicleDetail:
+      type: object
+      description: Vehículo registrado por un usuario. Es reutilizable entre ciclos y entre solicitudes.
+      properties:
+        idVehicle:
+          type: integer
+          description: Identificador del vehículo.
+          example: 1
+        numberPlate:
+          type: string
+          description: Placa del vehículo.
+          example: HNC-234
+        idVehicleType:
+          type: integer
+          description: Identificador del tipo del vehículo.
+          example: 2
+        vehicleType:
+          type: string
+          description: Tipo del vehículo.
+          example: Motocicleta
+        active:
+          type: boolean
+          description: >-
+            Indica si el vehículo está disponible para ser utilizado en nuevas solicitudes.
+            No indica que el vehículo esté autorizado a ingresar al estacionamiento; la autorización
+            depende del estado de la solicitud.
+          example: true
+    VehicleDetailList:
+      type: object
+      properties:
+        vehicles:
+          type: array
+          description: Lista de vehículos registrados por el usuario, habilitados y deshabilitados.
+          items:
+            $ref: '#/components/schemas/VehicleDetail'
+        registeredVehicles:
+          type: integer
+          description: Cantidad de vehículos registrados por el usuario, incluyendo los deshabilitados.
+          example: 3
+        maxVehicles:
+          type: integer
+          description: Cantidad máxima de vehículos que un usuario puede tener registrados.
+          example: 5
+    VehicleIn:
+      type: object
+      required:
+        - vehicleType
+        - numberPlate
+      properties:
+        vehicleType:
+          type: integer
+          description: Tipo del vehículo.
+          example: 1
+        numberPlate:
+          type: string
+          description: >-
+            Placa del vehículo. Los automóviles y camionetas usan el formato de 3-3 caracteres (ABC-123)
+            y las motocicletas, trimotos y motos eléctricas el formato de 2-4 caracteres (AB-1234).
+          example: HNC-234
+    VehicleAvailabilityIn:
+      type: object
+      required:
+        - active
+      properties:
+        active:
+          type: boolean
+          description: Nueva disponibilidad del vehículo para ser utilizado en nuevas solicitudes.
+          example: false
     ApplicantInformation:
       type: object
       properties:
@@ -645,6 +930,7 @@ components:
           description: >-
             Placa del vehículo. Los automóviles y camionetas usan el formato de 3-3 caracteres (ABC-123)
             y las motocicletas, trimotos y motos eléctricas el formato de 2-4 caracteres (AB-1234).
+            Si la placa corresponde a un vehículo ya registrado por el usuario, se reutiliza ese vehículo.
           example: HNC-234
     ParkingRequestResubmitIn:
       type: object
