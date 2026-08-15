@@ -20,17 +20,11 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
-  private static final String VEHICLES_PATH = "/vehicles/**";
-  private static final String[] APPLICANT_AUTHORITIES = {
-      "ROLE_STUDENT", "ROLE_TEACHER", "ROLE_ADMINISTRATIVE"
-  };
-
   @Bean
   SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
     return http
         .authorizeExchange(auth -> auth
             .pathMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-            .pathMatchers(VEHICLES_PATH).hasAnyAuthority(APPLICANT_AUTHORITIES)
             .anyExchange().authenticated())
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())

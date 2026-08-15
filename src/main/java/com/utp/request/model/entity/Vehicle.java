@@ -22,6 +22,6 @@ public class Vehicle {
   @Column("number_plate")
   private String numberPlate;
 
-  @Column("active")
-  private Boolean active;
+  @Column("id_vehicle_status")
+  private Integer idVehicleStatus;
 }

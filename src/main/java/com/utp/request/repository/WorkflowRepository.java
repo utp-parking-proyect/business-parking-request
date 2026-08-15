@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 public interface WorkflowRepository extends R2dbcRepository<Workflow, Integer> {
 
   @Query(value = """
-      INSERT INTO workflow (id_request, id_status, date_status_change, observation)
+      INSERT INTO parking_request_workflow (id_request, id_status, date_status_change, observation)
       VALUES (:requestId, :statusId, :dateStatusChange, :observation);
       """)
   Mono<Void> saveWorkflow(@Param("requestId") Integer requestId,
@@ -23,7 +23,7 @@ public interface WorkflowRepository extends R2dbcRepository<Workflow, Integer> {
                           @Param("observation") String observation);
 
   @Query(value = """
-      SELECT * FROM workflow
+      SELECT * FROM parking_request_workflow
       WHERE id_request = :requestId
       ORDER BY date_status_change, id_workflow;
       """)

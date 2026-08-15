@@ -15,13 +15,14 @@ import com.utp.request.model.entity.Request;
 import com.utp.request.model.entity.Status;
 import com.utp.request.model.entity.Vehicle;
 import com.utp.request.model.entity.VehicleType;
-import com.utp.request.model.entity.Workflow;
 import com.utp.request.repository.RequestRepository;
 import com.utp.request.repository.StatusRepository;
 import com.utp.request.repository.VehicleRepository;
 import com.utp.request.repository.VehicleTypeRepository;
 import com.utp.request.repository.WorkflowRepository;
+import com.utp.request.service.AcceptorSelector;
 import com.utp.request.service.RequestService;
+import com.utp.request.service.WorkflowService;
 import com.utp.request.util.Constants;
 import com.utp.request.util.NumberPlateValidator;
 import com.utp.request.util.error.ConflictException;
@@ -34,11 +35,8 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,6 +53,8 @@ public class RequestServiceImpl implements RequestService {
   private final StatusRepository statusRepository;
   private final VehicleTypeRepository vehicleTypeRepository;
   private final PortalServiceClient portalServiceClient;
+  private final AcceptorSelector acceptorSelector;
+  private final WorkflowService workflowService;
   private final TransactionalOperator transactionalOperator;
   private final ParkingRequestInformationMapper parkingRequestInformationMapper;
 
@@ -74,7 +74,8 @@ public class RequestServiceImpl implements RequestService {
     return validateRequestsPerCycleLimit(userId, idCycle)
         .then(Mono.defer(() -> resolveVehicle(userId, numberPlate, request.getVehicleType())))
         .flatMap(vehicle -> validateNoActiveRequest(vehicle.getIdVehicle(), idCycle)
-            .then(Mono.defer(() -> createRequestWithWorkflow(vehicle.getIdVehicle(), idCycle, idCampus))));
+            .then(Mono.defer(() -> createRequestWithWorkflow(vehicle.getIdVehicle(), userId, idCycle,
+                idCampus))));
   }
 
   private Mono<Void> validateRequestsPerCycleLimit(Integer userId, Integer idCycle) {
@@ -156,11 +157,9 @@ public class RequestServiceImpl implements RequestService {
       return Mono.empty();
     }
 
-    return vehicleRepository.findById(request.getIdVehicle())
-        .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
-        .flatMap(vehicle -> isSameUser(authenticatedUserId, vehicle.getIdUser())
-            ? Mono.empty()
-            : Mono.error(new ForbiddenException(Constants.ERROR_REQUEST_NOT_OWNED)));
+    return isSameUser(authenticatedUserId, request.getIdApplicant())
+        ? Mono.empty()
+        : Mono.error(new ForbiddenException(Constants.ERROR_REQUEST_NOT_OWNED));
   }
 
   private boolean isSameUser(Long authenticatedUserId, Integer userId) {
@@ -170,28 +169,8 @@ public class RequestServiceImpl implements RequestService {
   private Mono<ParkingRequestDetail> buildDetail(Request request) {
     return Mono.zip(
             buildInformationList(List.of(request)).map(list -> list.getParkingRequests().getFirst()),
-            buildWorkflow(request.getIdRequest()))
+            workflowService.toEntries(workflowRepository.findAllByRequestId(request.getIdRequest())))
         .map(tuple -> toDetail(tuple.getT1(), tuple.getT2()));
-  }
-
-  private Mono<List<WorkflowEntry>> buildWorkflow(Integer requestId) {
-    return workflowRepository.findAllByRequestId(requestId)
-        .collectList()
-        .flatMap(entries -> {
-          if (entries.isEmpty()) {
-            return Mono.just(List.of());
-          }
-
-          Set<Integer> statusIds = entries.stream().map(Workflow::getIdStatus)
-              .collect(Collectors.toSet());
-
-          return statusRepository.findAllById(statusIds)
-              .collectMap(Status::getIdStatus)
-              .map(statuses -> entries.stream()
-                  .map(entry -> parkingRequestInformationMapper
-                      .toWorkflowEntry(entry, statuses.get(entry.getIdStatus())))
-                  .toList());
-        });
   }
 
   private ParkingRequestDetail toDetail(ParkingRequestInformation information,
@@ -215,31 +194,41 @@ public class RequestServiceImpl implements RequestService {
 
   private Mono<Vehicle> resolveVehicle(Integer userId, String numberPlate, Integer idVehicleType) {
     return vehicleRepository.findByNumberPlate(numberPlate)
-        .flatMap(vehicle -> vehicle.getIdUser().equals(userId)
-            ? validateVehicleIsActive(vehicle)
-            : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER)))
+        .flatMap(vehicle -> {
+          if (vehicle.getIdUser() == null) {
+            return Mono.error(new ConflictException(Constants.ERROR_PLATE_REGISTERED_UNASSIGNED));
+          }
+          return userId.equals(vehicle.getIdUser())
+              ? validateVehicleIsActive(vehicle)
+              : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER));
+        })
         .switchIfEmpty(Mono.defer(() -> registerVehicle(userId, numberPlate, idVehicleType)));
   }
 
   private Mono<Vehicle> registerVehicle(Integer userId, String numberPlate, Integer idVehicleType) {
     return NumberPlateValidator.validate(numberPlate, idVehicleType)
-        .then(Mono.defer(() -> validateVehicleLimit(userId)))
-        .then(Mono.defer(() -> vehicleRepository.insertVehicle(idVehicleType, userId, numberPlate)))
+        .then(Mono.defer(() -> validateActiveVehicleLimit(userId)))
+        .then(Mono.defer(() -> vehicleRepository.insertVehicle(idVehicleType, userId, numberPlate,
+            Constants.ID_VEHICLE_STATUS_ACTIVE)))
         .flatMap(vehicleRepository::findById);
   }
 
-  private Mono<Void> validateVehicleLimit(Integer userId) {
-    return vehicleRepository.countByIdUser(userId)
+  private Mono<Void> validateActiveVehicleLimit(Integer userId) {
+    return vehicleRepository
+        .countByIdUserAndIdVehicleStatus(userId, Constants.ID_VEHICLE_STATUS_ACTIVE)
         .defaultIfEmpty(0L)
-        .flatMap(registered -> registered >= Constants.MAX_VEHICLES_PER_USER
-            ? Mono.error(new ConflictException(Constants.ERROR_MAX_VEHICLES_REACHED))
+        .flatMap(active -> active >= Constants.MAX_ACTIVE_VEHICLES_PER_USER
+            ? Mono.error(new ConflictException(Constants.ERROR_MAX_ACTIVE_VEHICLES_REACHED))
             : Mono.empty());
   }
 
   private Mono<Vehicle> validateVehicleIsActive(Vehicle vehicle) {
-    return Boolean.FALSE.equals(vehicle.getActive())
-        ? Mono.error(new ConflictException(Constants.ERROR_VEHICLE_INACTIVE))
-        : Mono.just(vehicle);
+    if (Constants.ID_VEHICLE_STATUS_UNASSIGNED.equals(vehicle.getIdVehicleStatus())) {
+      return Mono.error(new ConflictException(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED));
+    }
+    return Constants.ID_VEHICLE_STATUS_ACTIVE.equals(vehicle.getIdVehicleStatus())
+        ? Mono.just(vehicle)
+        : Mono.error(new ConflictException(Constants.ERROR_VEHICLE_INACTIVE));
   }
 
   private Mono<Void> validateNoActiveRequest(Integer idVehicle, Integer idCycle) {
@@ -250,9 +239,11 @@ public class RequestServiceImpl implements RequestService {
         .then();
   }
 
-  private Mono<Request> createRequestWithWorkflow(Integer idVehicle, Integer idCycle, Long idCampus) {
+  private Mono<Request> createRequestWithWorkflow(Integer idVehicle, Integer idApplicant,
+                                                 Integer idCycle, Long idCampus) {
     LocalDateTime now = LocalDateTime.now();
-    return requestRepository.insertRequest(idVehicle, idCycle, Constants.ID_STATUS_REGISTERED, now)
+    return requestRepository.insertRequest(idVehicle, idApplicant, idCycle,
+            Constants.ID_STATUS_REGISTERED, now)
         .flatMap(requestId -> workflowRepository
             .saveWorkflow(requestId, Constants.ID_STATUS_REGISTERED, now, Constants.OBSERVATION_REGISTERED)
             .then(Mono.defer(() -> assignAcceptor(requestId, idCampus)))
@@ -269,7 +260,7 @@ public class RequestServiceImpl implements RequestService {
   private Mono<Vehicle> findOwnedVehicle(Integer userId, Integer idVehicle) {
     return vehicleRepository.findById(idVehicle)
         .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
-        .flatMap(vehicle -> vehicle.getIdUser().equals(userId)
+        .flatMap(vehicle -> userId.equals(vehicle.getIdUser())
             ? Mono.just(vehicle)
             : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER)));
   }
@@ -288,16 +279,7 @@ public class RequestServiceImpl implements RequestService {
   }
 
   private Mono<Void> assignAcceptor(Integer requestId, Long idCampus) {
-    return portalServiceClient.getEligibleAcceptors(idCampus)
-        .flatMap(acceptor -> requestRepository
-            .countByIdAcceptorAndIdStatus(acceptor.getIdUser().intValue(), Constants.ID_STATUS_IN_REVISION)
-            .map(count -> Tuples.of(acceptor.getIdUser().intValue(), count)))
-        .collectList()
-        .flatMap(counts -> counts.stream()
-            .min(Comparator.comparing(Tuple2::getT2))
-            .map(Tuple2::getT1)
-            .map(Mono::just)
-            .orElseGet(() -> Mono.error(new ConflictException(Constants.ERROR_NO_ACCEPTOR_AVAILABLE))))
+    return acceptorSelector.selectLeastLoaded(idCampus)
         .flatMap(acceptorId -> {
           log.info("Assigning acceptor {} to request {}", acceptorId, requestId);
           return requestRepository.updateAcceptorAndStatus(requestId, acceptorId, Constants.ID_STATUS_IN_REVISION)
@@ -337,8 +319,8 @@ public class RequestServiceImpl implements RequestService {
 
           Set<Integer> vehicleTypeIds = vehicles.values().stream()
               .map(Vehicle::getIdVehicleType).collect(Collectors.toSet());
-          Set<Long> userIds = vehicles.values().stream()
-              .map(vehicle -> vehicle.getIdUser().longValue()).collect(Collectors.toSet());
+          Set<Long> userIds = requests.stream()
+              .map(request -> request.getIdApplicant().longValue()).collect(Collectors.toSet());
 
           Mono<Map<Integer, VehicleType>> vehicleTypesMono = vehicleTypeRepository.findAllById(vehicleTypeIds)
               .collectMap(VehicleType::getIdVehicleType);
@@ -364,7 +346,7 @@ public class RequestServiceImpl implements RequestService {
                                                   Map<Integer, Status> statuses, Map<Integer, CycleResponse> cycles, Map<Integer, VehicleType> vehicleTypes,
                                                   Map<Long, UserResponse> users) {
     Vehicle vehicle = vehicles.get(request.getIdVehicle());
-    UserResponse applicant = vehicle == null ? null : users.get(vehicle.getIdUser().longValue());
+    UserResponse applicant = users.get(request.getIdApplicant().longValue());
     VehicleType vehicleType = vehicle == null ? null : vehicleTypes.get(vehicle.getIdVehicleType());
     Status status = statuses.get(request.getIdStatus());
     CycleResponse cycle = cycles.get(request.getIdCycle());
