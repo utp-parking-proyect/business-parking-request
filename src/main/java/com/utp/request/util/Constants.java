@@ -22,7 +22,12 @@ public final class Constants {
   public static final Integer ID_STATUS_REJECTED = 4;
   public static final Integer ID_STATUS_RESUBMITTED = 5;
 
-  public static final Integer MAX_VEHICLES_PER_USER = 5;
+  public static final Integer ID_VEHICLE_STATUS_ACTIVE = 1;
+  public static final Integer ID_VEHICLE_STATUS_DISABLED = 2;
+  public static final Integer ID_VEHICLE_STATUS_UNASSIGNED = 3;
+
+
+  public static final Integer MAX_ACTIVE_VEHICLES_PER_USER = 5;
   public static final Integer MAX_REQUESTS_PER_CYCLE = 2;
 
   public static final String ROLE_NAME_SAE = "ROLE_SAE";
@@ -41,17 +46,10 @@ public final class Constants {
       "La placa de un automóvil o camioneta debe tener el formato ABC-123 (3-3 caracteres)";
   public static final String ERROR_INVALID_NUMBER_PLATE_MOTORCYCLE =
       "La placa de una motocicleta debe tener el formato AB-1234 (2-4 caracteres)";
-  public static final String ERROR_VEHICLE_ACTIVE_REQUIRED =
-      "Debe indicar si el vehículo estará disponible para nuevas solicitudes";
-  public static final String ERROR_VEHICLE_NOT_FOUND = "El vehículo no existe";
-  public static final String ERROR_VEHICLE_NOT_OWNED =
-      "No tienes permisos para modificar este vehículo";
   public static final String ERROR_VEHICLE_INACTIVE =
       "El vehículo seleccionado está deshabilitado y no puede utilizarse en nuevas solicitudes";
-  public static final String ERROR_VEHICLE_ALREADY_REGISTERED =
-      "Ya tienes registrado un vehículo con esta placa";
-  public static final String ERROR_MAX_VEHICLES_REACHED =
-      "Has alcanzado el máximo de " + MAX_VEHICLES_PER_USER + " vehículos registrados";
+  public static final String ERROR_MAX_ACTIVE_VEHICLES_REACHED =
+      "Has alcanzado el máximo de " + MAX_ACTIVE_VEHICLES_PER_USER + " vehículos activos";
   public static final String ERROR_MAX_REQUESTS_PER_CYCLE_REACHED =
       "Has alcanzado el máximo de " + MAX_REQUESTS_PER_CYCLE + " solicitudes para este ciclo";
   public static final String ERROR_REQUEST_ALREADY_EXISTS =
@@ -75,5 +73,10 @@ public final class Constants {
       "El token no contiene el identificador del usuario autenticado";
   public static final String ERROR_ACCEPTOR_NOT_SAE = "El aceptante no es Personal SAE";
   public static final String ERROR_NO_ACCEPTOR_AVAILABLE = "No hay Personal SAE disponible para ser asignado";
+  public static final String ERROR_PLATE_REGISTERED_UNASSIGNED =
+      "Esta placa ya está registrada y fue desasignada de su propietario anterior. "
+          + "Comunícate con Personal SAE para reasignarla";
+  public static final String ERROR_VEHICLE_ALREADY_UNASSIGNED =
+      "El vehículo ya no está asignado a ningún usuario";
   public static final String ERROR_USERS_SERVICE_UNAVAILABLE = "business-core-portal no se encuentra disponible";
 }

@@ -420,7 +420,7 @@ paths:
       summary: Obtiene los vehículos registrados por el usuario autenticado.
       description: |-
         ### Acerca de la funcionalidad expuesta
-        Devuelve los vehículos que el usuario autenticado tiene registrados, habilitados y deshabilitados, junto con la cantidad registrada y el máximo permitido. El propietario se determina a partir del usuario autenticado, no del cuerpo ni de la ruta de la petición.
+        Devuelve los vehículos que el usuario autenticado tiene registrados, habilitados y deshabilitados, junto con la cantidad de vehículos activos y el máximo de activos permitido. El propietario se determina a partir del usuario autenticado, no del cuerpo ni de la ruta de la petición.
 
         ### Data de Prueba
         No aplica.
@@ -480,7 +480,7 @@ paths:
       summary: Registra un vehículo para el usuario autenticado.
       description: |-
         ### Acerca de la funcionalidad expuesta
-        Registra un vehículo reutilizable que el usuario podrá seleccionar al crear solicitudes de ingreso al estacionamiento. El propietario se determina a partir del usuario autenticado. Un usuario no puede superar el máximo de vehículos registrados, contando los deshabilitados.
+        Registra un vehículo reutilizable que el usuario podrá seleccionar al crear solicitudes de ingreso al estacionamiento. El propietario se determina a partir del usuario autenticado. Un usuario no puede superar el máximo de vehículos activos; los vehículos deshabilitados permanecen registrados y no cuentan para ese límite.
 
         ### Data de Prueba
         No aplica.
@@ -524,7 +524,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiException'
         '409':
-          description: El usuario alcanzó el máximo de vehículos registrados o ya tiene registrada la placa indicada.
+          description: El usuario alcanzó el máximo de vehículos activos o ya tiene registrada la placa indicada.
           content:
             application/json:
               schema:
@@ -553,7 +553,7 @@ paths:
       summary: Habilita o deshabilita un vehículo del usuario autenticado.
       description: |-
         ### Acerca de la funcionalidad expuesta
-        Modifica únicamente la disponibilidad del vehículo para nuevas solicitudes. Deshabilitar un vehículo no lo elimina ni afecta las solicitudes ni el historial de workflow ya registrados. Solo el propietario del vehículo puede ejecutar esta operación.
+        Modifica únicamente la disponibilidad del vehículo para nuevas solicitudes. Deshabilitar un vehículo no lo elimina ni afecta las solicitudes ni el historial de workflow ya registrados. Habilitar un vehículo requiere que el usuario no haya alcanzado el máximo de vehículos activos. Solo el propietario del vehículo puede ejecutar esta operación.
 
         ### Data de Prueba
         No aplica.
@@ -605,6 +605,299 @@ paths:
                 $ref: '#/components/schemas/ApiException'
         '404':
           description: El vehículo indicado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: El usuario ya alcanzó el máximo de vehículos activos y no puede habilitar otro.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /vehicles/{vehicleId}/unassignment-requests:
+    post:
+      operationId: requestVehicleUnassignment
+      summary: Solicita la desasignación de un vehículo del usuario autenticado.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Registra una solicitud para que el vehículo deje de pertenecer al usuario. La desasignación no es inmediata: queda sujeta a la revisión de Personal SAE mediante el workflow del proceso VEHICLE_UNASSIGNMENT. Solo el propietario actual puede solicitarla, el vehículo no puede estar ya desasignado y no puede existir otra solicitud abierta para el mismo vehículo.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Vehicle Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: vehicleId
+          in: path
+          description: ID del vehículo.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleUnassignmentIn'
+        required: true
+      responses:
+        '201':
+          description: Proceso de Registro Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleUnassignmentRequestDetail'
+        '400':
+          description: Los datos proporcionados no son válidos, o falta el motivo de la desasignación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El vehículo indicado pertenece a otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: El vehículo indicado no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: El vehículo ya está desasignado o ya tiene una solicitud de desasignación en curso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /vehicles/unassignment-requests/me:
+    get:
+      operationId: getMyVehicleUnassignmentRequests
+      summary: Obtiene las solicitudes de desasignación registradas por el usuario autenticado.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Devuelve las solicitudes de desasignación del usuario autenticado con su estado y su historial de workflow, para que pueda conocer cuáles están en revisión y el motivo de las que fueron rechazadas.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Vehicle Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+      responses:
+        '200':
+          description: Listado de solicitudes de desasignación del usuario autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleUnassignmentRequestList'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: No tiene los permisos necesarios para ejecutar esta operacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /vehicles/unassignment-requests/acceptor/{acceptorId}:
+    get:
+      operationId: getVehicleUnassignmentRequestsByAcceptor
+      summary: Obtiene las solicitudes de desasignación asignadas a un aceptante.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Devuelve las solicitudes de desasignación de vehículos asignadas al Personal SAE indicado, para su revisión. El aceptante consultado debe coincidir con el usuario autenticado.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Vehicle Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: acceptorId
+          in: path
+          description: ID del aceptante.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Listado de solicitudes de desasignación del aceptante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleUnassignmentRequestList'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El usuario autenticado no tiene el rol ROLE_SAE, o no es el aceptante consultado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /vehicles/unassignment-requests/{unassignmentRequestId}:
+    patch:
+      operationId: respondToVehicleUnassignmentRequest
+      summary: Registra la respuesta de Personal SAE a una solicitud de desasignación de vehículo.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Permite que el Personal SAE asignado como aceptante apruebe o rechace la desasignación. Al aprobarla, el vehículo queda en estado UNASSIGNED y sin propietario, conservando intactas sus solicitudes de estacionamiento y su historial. Al rechazarla, el vehículo no se modifica y el motivo del rechazo queda visible para el solicitante.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Vehicle Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: unassignmentRequestId
+          in: path
+          description: ID de la solicitud de desasignación.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParkingResponseIn'
+        required: true
+      responses:
+        '200':
+          description: Proceso de Respuesta Satisfactorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleUnassignmentRequestDetail'
+        '400':
+          description: Los datos proporcionados no son válidos, o falta el comentario requerido al rechazar la solicitud.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El usuario autenticado no tiene el rol ROLE_SAE, o no es el aceptante asignado a la solicitud.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: La solicitud de desasignación indicada no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '409':
+          description: La solicitud no se encuentra en un estado que permita ser respondida.
           content:
             application/json:
               schema:
@@ -750,6 +1043,18 @@ components:
           type: string
           description: Placa del vehículo.
           example: HNC-234
+    VehicleStatus:
+      type: string
+      description: >-
+        Estado del vehículo dentro de su ciclo de vida. ACTIVE: asignado al usuario y disponible
+        para nuevas solicitudes. DISABLED: sigue perteneciendo al usuario pero no puede usarse en
+        nuevas solicitudes. UNASSIGNED: ya no pertenece a ningún usuario; el registro se conserva
+        para mantener la trazabilidad del historial.
+      enum:
+        - ACTIVE
+        - DISABLED
+        - UNASSIGNED
+      example: ACTIVE
     VehicleDetail:
       type: object
       description: Vehículo registrado por un usuario. Es reutilizable entre ciclos y entre solicitudes.
@@ -770,29 +1075,92 @@ components:
           type: string
           description: Tipo del vehículo.
           example: Motocicleta
-        active:
-          type: boolean
-          description: >-
-            Indica si el vehículo está disponible para ser utilizado en nuevas solicitudes.
-            No indica que el vehículo esté autorizado a ingresar al estacionamiento; la autorización
-            depende del estado de la solicitud.
-          example: true
+        status:
+          $ref: '#/components/schemas/VehicleStatus'
     VehicleDetailList:
       type: object
       properties:
         vehicles:
           type: array
-          description: Lista de vehículos registrados por el usuario, habilitados y deshabilitados.
+          description: >-
+            Lista de vehículos asignados al usuario, activos y deshabilitados. Los vehículos
+            desasignados no pertenecen a ningún usuario y no se incluyen.
           items:
             $ref: '#/components/schemas/VehicleDetail'
-        registeredVehicles:
+        assignedVehicles:
           type: integer
-          description: Cantidad de vehículos registrados por el usuario, incluyendo los deshabilitados.
+          description: Cantidad de vehículos asignados al usuario, incluyendo los deshabilitados.
           example: 3
-        maxVehicles:
+        activeVehicles:
           type: integer
-          description: Cantidad máxima de vehículos que un usuario puede tener registrados.
+          description: Cantidad de vehículos activos del usuario. Es el valor que se compara contra el máximo permitido.
+          example: 2
+        maxActiveVehicles:
+          type: integer
+          description: >-
+            Cantidad máxima de vehículos activos que un usuario puede tener. Los vehículos
+            deshabilitados permanecen asignados y no cuentan para este máximo; los desasignados
+            tampoco, porque ya no pertenecen al usuario.
           example: 5
+    VehicleUnassignmentIn:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Motivo por el que el usuario solicita dejar de ser propietario del vehículo.
+          example: Vendí el vehículo.
+    VehicleUnassignmentRequestDetail:
+      type: object
+      description: >-
+        Solicitud de desasignación de un vehículo. Su aprobación por Personal SAE deja el vehículo
+        en estado UNASSIGNED y sin propietario, conservando su historial de solicitudes.
+      properties:
+        idUnassignmentRequest:
+          type: integer
+          description: Identificador de la solicitud de desasignación.
+          example: 1
+        applicant:
+          $ref: '#/components/schemas/ApplicantInformation'
+        vehicle:
+          $ref: '#/components/schemas/VehicleInformation'
+        idVehicle:
+          type: integer
+          description: Identificador del vehículo cuya desasignación se solicita.
+          example: 1
+        reason:
+          type: string
+          description: Motivo indicado por el solicitante.
+          example: Vendí el vehículo.
+        status:
+          type: string
+          description: Estado de la solicitud de desasignación.
+          example: EN_REVISION
+        dateRequest:
+          type: string
+          description: Fecha de la solicitud.
+          example: '2026-06-01T10:00:00Z'
+        dateResponse:
+          type: string
+          description: Fecha de la respuesta de Personal SAE, si ya fue atendida.
+          example: '2026-06-02T10:00:00Z'
+          nullable: true
+        workflow:
+          type: array
+          description: Historial de cambios de estado, del más antiguo al más reciente.
+          items:
+            $ref: '#/components/schemas/WorkflowEntry'
+    VehicleUnassignmentRequestList:
+      type: object
+      properties:
+        unassignmentRequests:
+          type: array
+          description: Lista de solicitudes de desasignación de vehículos.
+          items:
+            $ref: '#/components/schemas/VehicleUnassignmentRequestDetail'
     VehicleIn:
       type: object
       required:

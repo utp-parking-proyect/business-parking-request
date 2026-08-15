@@ -14,17 +14,18 @@ import java.time.LocalDateTime;
 public interface RequestRepository extends R2dbcRepository<Request, Integer> {
 
   @Query(value = """
-      INSERT INTO requests (id_vehicle, id_cycle, id_status, date_request)
-      VALUES (:idVehicle, :idCycle, :idStatus, :dateRequest)
+      INSERT INTO parking_requests (id_vehicle, id_applicant, id_cycle, id_status, date_request)
+      VALUES (:idVehicle, :idApplicant, :idCycle, :idStatus, :dateRequest)
       RETURNING id_request;
       """)
   Mono<Integer> insertRequest(@Param("idVehicle") Integer idVehicle,
+                               @Param("idApplicant") Integer idApplicant,
                                @Param("idCycle") Integer idCycle,
                                @Param("idStatus") Integer idStatus,
                                @Param("dateRequest") LocalDateTime dateRequest);
 
   @Query(value = """
-      UPDATE requests
+      UPDATE parking_requests
       SET id_acceptor = :idAcceptor,
           id_status = :idStatus
       WHERE id_request = :idRequest;
@@ -34,7 +35,7 @@ public interface RequestRepository extends R2dbcRepository<Request, Integer> {
                                      @Param("idStatus") Integer idStatus);
 
   @Query(value = """
-      UPDATE requests
+      UPDATE parking_requests
       SET id_status = :idStatus,
           date_response = :dateResponse
       WHERE id_request = :idRequest;
@@ -50,16 +51,14 @@ public interface RequestRepository extends R2dbcRepository<Request, Integer> {
   Mono<Long> countByIdAcceptorAndIdStatus(Integer idAcceptor, Integer idStatus);
 
   @Query(value = """
-      SELECT r.* FROM requests r
-      JOIN vehicles v ON v.id_vehicle = r.id_vehicle
-      WHERE v.id_user = :userId;
+      SELECT r.* FROM parking_requests r
+      WHERE r.id_applicant = :userId;
       """)
   Flux<Request> findAllByApplicantUserId(@Param("userId") Integer userId);
 
   @Query(value = """
-      SELECT COUNT(*) FROM requests r
-      JOIN vehicles v ON v.id_vehicle = r.id_vehicle
-      WHERE v.id_user = :userId AND r.id_cycle = :idCycle;
+      SELECT COUNT(*) FROM parking_requests r
+      WHERE r.id_applicant = :userId AND r.id_cycle = :idCycle;
       """)
   Mono<Long> countByApplicantUserIdAndIdCycle(@Param("userId") Integer userId,
                                               @Param("idCycle") Integer idCycle);

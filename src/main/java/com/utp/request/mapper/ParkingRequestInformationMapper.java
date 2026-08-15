@@ -4,7 +4,6 @@ import com.utp.request.generated.client.users.model.CycleResponse;
 import com.utp.request.generated.client.users.model.UserResponse;
 import com.utp.request.generated.model.ApplicantInformation;
 import com.utp.request.generated.model.ParkingRequestInformation;
-import com.utp.request.generated.model.VehicleDetail;
 import com.utp.request.generated.model.VehicleInformation;
 import com.utp.request.generated.model.WorkflowEntry;
 import com.utp.request.model.entity.Request;
@@ -22,13 +21,6 @@ public interface ParkingRequestInformationMapper {
   @Mapping(target = "numberPlate", source = "vehicle.numberPlate")
   @Mapping(target = "vehicleType", source = "vehicleType.nameVehicleType")
   VehicleInformation toVehicleInformation(Vehicle vehicle, VehicleType vehicleType);
-
-  @Mapping(target = "idVehicle", source = "vehicle.idVehicle")
-  @Mapping(target = "numberPlate", source = "vehicle.numberPlate")
-  @Mapping(target = "idVehicleType", source = "vehicle.idVehicleType")
-  @Mapping(target = "vehicleType", source = "vehicleType.nameVehicleType")
-  @Mapping(target = "active", source = "vehicle.active")
-  VehicleDetail toVehicleDetail(Vehicle vehicle, VehicleType vehicleType);
 
   @Mapping(target = "idApplicant", source = "applicant.idUser")
   @Mapping(target = "nameApplicant", source = "applicant.name")

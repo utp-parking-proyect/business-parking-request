@@ -8,7 +8,7 @@ import org.springframework.data.relational.core.mapping.Table;
 import java.time.LocalDateTime;
 
 @Data
-@Table("requests")
+@Table("parking_requests")
 public class Request {
 
   @Id
@@ -17,6 +17,9 @@ public class Request {
 
   @Column("id_vehicle")
   private Integer idVehicle;
+
+  @Column("id_applicant")
+  private Integer idApplicant;
 
   @Column("id_cycle")
   private Integer idCycle;
