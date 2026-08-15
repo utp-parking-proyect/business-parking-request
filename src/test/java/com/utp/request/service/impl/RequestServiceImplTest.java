@@ -116,7 +116,7 @@ class RequestServiceImplTest {
     vehicle.setIdUser(idUser);
     vehicle.setIdVehicleType(1);
     vehicle.setNumberPlate("HNC-234");
-    vehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_ACTIVE);
+    vehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_ASSIGNED);
     return vehicle;
   }
 
@@ -415,17 +415,17 @@ class RequestServiceImplTest {
   }
 
   @Test
-  void testSaveNewRequest_InactiveVehicle_IsConflict() {
+  void testSaveNewRequest_UnassignedVehicleOfTheApplicant_IsConflict() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("HNC-234").vehicleType(1);
-    Vehicle inactiveVehicle = vehicle(100, 10);
-    inactiveVehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_DISABLED);
+    Vehicle unassignedVehicle = vehicle(100, 10);
+    unassignedVehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_UNASSIGNED);
 
     when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
-    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(inactiveVehicle));
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(unassignedVehicle));
 
     StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
         .expectErrorMatches(error -> error instanceof ConflictException
-            && error.getMessage().equals(Constants.ERROR_VEHICLE_INACTIVE))
+            && error.getMessage().equals(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED))
         .verify();
 
     Mockito.verify(requestRepository, Mockito.never()).insertRequest(anyInt(), anyInt(), anyInt(), anyInt(), any());
@@ -456,16 +456,17 @@ class RequestServiceImplTest {
   }
 
   @Test
-  void testSaveNewRequest_SixthActiveVehicle_IsConflict() {
+  void testSaveNewRequest_SixthAssignedVehicle_IsConflict() {
     ParkingRequestIn requestIn = new ParkingRequestIn().numberPlate("XYZ-456").vehicleType(1);
 
-    when(vehicleRepository.countByIdUserAndIdVehicleStatus(10, 1)).thenReturn(Mono.just(5L));
+    when(vehicleRepository.countByIdUserAndIdVehicleStatus(10,
+        Constants.ID_VEHICLE_STATUS_ASSIGNED)).thenReturn(Mono.just(5L));
     when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(vehicleRepository.findByNumberPlate("XYZ-456")).thenReturn(Mono.empty());
 
     StepVerifier.create(requestService.saveNewRequest(APPLICANT_ID, requestIn))
         .expectErrorMatches(error -> error instanceof ConflictException
-            && error.getMessage().equals(Constants.ERROR_MAX_ACTIVE_VEHICLES_REACHED))
+            && error.getMessage().equals(Constants.ERROR_MAX_ASSIGNED_VEHICLES_REACHED))
         .verify();
 
     Mockito.verify(vehicleRepository, Mockito.never()).insertVehicle(anyInt(), anyInt(), any(), anyInt());
@@ -473,18 +474,18 @@ class RequestServiceImplTest {
   }
 
   @Test
-  void testResubmitRequest_InactiveVehicle_IsConflict() {
+  void testResubmitRequest_UnassignedVehicle_IsConflict() {
     Request existing = request(200, 100, 5, 4);
-    Vehicle inactiveVehicle = vehicle(100, 10);
-    inactiveVehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_DISABLED);
+    Vehicle unassignedVehicle = vehicle(100, null);
+    unassignedVehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_UNASSIGNED);
 
     when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
     when(requestRepository.findById(200)).thenReturn(Mono.just(existing));
-    when(vehicleRepository.findById(100)).thenReturn(Mono.just(inactiveVehicle));
+    when(vehicleRepository.findById(100)).thenReturn(Mono.just(unassignedVehicle));
 
     StepVerifier.create(requestService.resubmitRequest(APPLICANT_ID, 200, null))
         .expectErrorMatches(error -> error instanceof ConflictException
-            && error.getMessage().equals(Constants.ERROR_VEHICLE_INACTIVE))
+            && error.getMessage().equals(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED))
         .verify();
 
     Mockito.verify(requestRepository, Mockito.never()).updateStatusAndResponse(anyInt(), anyInt(), any());
@@ -553,18 +554,18 @@ class RequestServiceImplTest {
   }
 
   @Test
-  void testResubmitRequest_RejectedInPreviousCycle_ReportsTheCycleNotTheVehicle() {
+  void testResubmitRequest_UnassignedVehicleInPreviousCycle_ReportsTheVehicleNotTheCycle() {
     Request existing = request(200, 100, 5, 4);
-    Vehicle inactiveVehicle = vehicle(100, 10);
-    inactiveVehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_DISABLED);
+    Vehicle unassignedVehicle = vehicle(100, null);
+    unassignedVehicle.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_UNASSIGNED);
 
     when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(6)));
     when(requestRepository.findById(200)).thenReturn(Mono.just(existing));
-    when(vehicleRepository.findById(100)).thenReturn(Mono.just(inactiveVehicle));
+    when(vehicleRepository.findById(100)).thenReturn(Mono.just(unassignedVehicle));
 
     StepVerifier.create(requestService.resubmitRequest(APPLICANT_ID, 200, null))
         .expectErrorMatches(error -> error instanceof ConflictException
-            && error.getMessage().equals(Constants.ERROR_REQUEST_WRONG_CYCLE))
+            && error.getMessage().equals(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED))
         .verify();
   }
 

@@ -22,12 +22,10 @@ public final class Constants {
   public static final Integer ID_STATUS_REJECTED = 4;
   public static final Integer ID_STATUS_RESUBMITTED = 5;
 
-  public static final Integer ID_VEHICLE_STATUS_ACTIVE = 1;
-  public static final Integer ID_VEHICLE_STATUS_DISABLED = 2;
-  public static final Integer ID_VEHICLE_STATUS_UNASSIGNED = 3;
+  public static final Integer ID_VEHICLE_STATUS_ASSIGNED = 1;
+  public static final Integer ID_VEHICLE_STATUS_UNASSIGNED = 2;
 
-
-  public static final Integer MAX_ACTIVE_VEHICLES_PER_USER = 5;
+  public static final Integer MAX_ASSIGNED_VEHICLES_PER_USER = 5;
   public static final Integer MAX_REQUESTS_PER_CYCLE = 2;
 
   public static final String ROLE_NAME_SAE = "ROLE_SAE";
@@ -46,10 +44,8 @@ public final class Constants {
       "La placa de un automóvil o camioneta debe tener el formato ABC-123 (3-3 caracteres)";
   public static final String ERROR_INVALID_NUMBER_PLATE_MOTORCYCLE =
       "La placa de una motocicleta debe tener el formato AB-1234 (2-4 caracteres)";
-  public static final String ERROR_VEHICLE_INACTIVE =
-      "El vehículo seleccionado está deshabilitado y no puede utilizarse en nuevas solicitudes";
-  public static final String ERROR_MAX_ACTIVE_VEHICLES_REACHED =
-      "Has alcanzado el máximo de " + MAX_ACTIVE_VEHICLES_PER_USER + " vehículos activos";
+  public static final String ERROR_MAX_ASSIGNED_VEHICLES_REACHED =
+      "Has alcanzado el máximo de " + MAX_ASSIGNED_VEHICLES_PER_USER + " vehículos asignados";
   public static final String ERROR_MAX_REQUESTS_PER_CYCLE_REACHED =
       "Has alcanzado el máximo de " + MAX_REQUESTS_PER_CYCLE + " solicitudes para este ciclo";
   public static final String ERROR_REQUEST_ALREADY_EXISTS =

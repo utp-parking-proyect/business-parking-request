@@ -199,7 +199,7 @@ public class RequestServiceImpl implements RequestService {
             return Mono.error(new ConflictException(Constants.ERROR_PLATE_REGISTERED_UNASSIGNED));
           }
           return userId.equals(vehicle.getIdUser())
-              ? validateVehicleIsActive(vehicle)
+              ? validateVehicleIsAssigned(vehicle)
               : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER));
         })
         .switchIfEmpty(Mono.defer(() -> registerVehicle(userId, numberPlate, idVehicleType)));
@@ -207,28 +207,25 @@ public class RequestServiceImpl implements RequestService {
 
   private Mono<Vehicle> registerVehicle(Integer userId, String numberPlate, Integer idVehicleType) {
     return NumberPlateValidator.validate(numberPlate, idVehicleType)
-        .then(Mono.defer(() -> validateActiveVehicleLimit(userId)))
+        .then(Mono.defer(() -> validateAssignedVehicleLimit(userId)))
         .then(Mono.defer(() -> vehicleRepository.insertVehicle(idVehicleType, userId, numberPlate,
-            Constants.ID_VEHICLE_STATUS_ACTIVE)))
+            Constants.ID_VEHICLE_STATUS_ASSIGNED)))
         .flatMap(vehicleRepository::findById);
   }
 
-  private Mono<Void> validateActiveVehicleLimit(Integer userId) {
+  private Mono<Void> validateAssignedVehicleLimit(Integer userId) {
     return vehicleRepository
-        .countByIdUserAndIdVehicleStatus(userId, Constants.ID_VEHICLE_STATUS_ACTIVE)
+        .countByIdUserAndIdVehicleStatus(userId, Constants.ID_VEHICLE_STATUS_ASSIGNED)
         .defaultIfEmpty(0L)
-        .flatMap(active -> active >= Constants.MAX_ACTIVE_VEHICLES_PER_USER
-            ? Mono.error(new ConflictException(Constants.ERROR_MAX_ACTIVE_VEHICLES_REACHED))
+        .flatMap(assigned -> assigned >= Constants.MAX_ASSIGNED_VEHICLES_PER_USER
+            ? Mono.error(new ConflictException(Constants.ERROR_MAX_ASSIGNED_VEHICLES_REACHED))
             : Mono.empty());
   }
 
-  private Mono<Vehicle> validateVehicleIsActive(Vehicle vehicle) {
-    if (Constants.ID_VEHICLE_STATUS_UNASSIGNED.equals(vehicle.getIdVehicleStatus())) {
-      return Mono.error(new ConflictException(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED));
-    }
-    return Constants.ID_VEHICLE_STATUS_ACTIVE.equals(vehicle.getIdVehicleStatus())
+  private Mono<Vehicle> validateVehicleIsAssigned(Vehicle vehicle) {
+    return Constants.ID_VEHICLE_STATUS_ASSIGNED.equals(vehicle.getIdVehicleStatus())
         ? Mono.just(vehicle)
-        : Mono.error(new ConflictException(Constants.ERROR_VEHICLE_INACTIVE));
+        : Mono.error(new ConflictException(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED));
   }
 
   private Mono<Void> validateNoActiveRequest(Integer idVehicle, Integer idCycle) {
@@ -253,16 +250,21 @@ public class RequestServiceImpl implements RequestService {
   private Mono<Void> validateResubmit(Integer userId, Request existing, Integer currentIdCycle) {
     return findOwnedVehicle(userId, existing.getIdVehicle())
         .flatMap(vehicle -> validateCurrentCycle(existing.getIdCycle(), currentIdCycle)
-            .then(Mono.defer(() -> validateVehicleIsActive(vehicle)))
+            .then(Mono.defer(() -> validateVehicleIsAssigned(vehicle)))
             .then(Mono.defer(() -> validateRejectedStatus(existing.getIdStatus()))));
   }
 
   private Mono<Vehicle> findOwnedVehicle(Integer userId, Integer idVehicle) {
     return vehicleRepository.findById(idVehicle)
         .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
-        .flatMap(vehicle -> userId.equals(vehicle.getIdUser())
-            ? Mono.just(vehicle)
-            : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER)));
+        .flatMap(vehicle -> {
+          if (vehicle.getIdUser() == null) {
+            return Mono.error(new ConflictException(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED));
+          }
+          return userId.equals(vehicle.getIdUser())
+              ? Mono.just(vehicle)
+              : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER));
+        });
   }
 
   private Mono<Void> validateCurrentCycle(Integer idCycle, Integer currentIdCycle) {
