@@ -16,7 +16,55 @@ tags:
     description: Consulta de usuarios registrados
   - name: Cycles
     description: Consulta del ciclo académico/institucional
+  - name: Campus
+    description: Consulta de los campus de la universidad
 paths:
+  /campus:
+    get:
+      tags: [ Campus ]
+      operationId: getAllCampus
+      summary: Listar los campus de la universidad
+      description: >
+        Devuelve los campus registrados. `business-core-portal` es la única fuente de verdad
+        de la información institucional del campus; los demás microservicios deben consumir
+        este endpoint para resolver su nombre en lugar de replicarlo. Las sedes y su
+        capacidad de estacionamiento no pertenecen a este microservicio, sino a
+        `business-parking-control`.
+      responses:
+        "200":
+          description: Campus registrados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampusResponse"
+  /campus/{id}:
+    get:
+      tags: [ Campus ]
+      operationId: getCampusById
+      summary: Obtener un campus por id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador del campus
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Campus encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampusResponse"
+        "404":
+          description: No existe un campus con ese id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiException"
   /cycles/current:
     get:
       tags: [ Cycles ]

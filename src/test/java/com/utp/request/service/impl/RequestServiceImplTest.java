@@ -5,6 +5,7 @@ import com.utp.request.generated.client.users.model.CampusResponse;
 import com.utp.request.generated.client.users.model.CycleResponse;
 import com.utp.request.generated.client.users.model.Role;
 import com.utp.request.generated.client.users.model.UserResponse;
+import com.utp.request.generated.model.ParkingAuthorizationResult;
 import com.utp.request.generated.model.ParkingRequestIn;
 import com.utp.request.mapper.ParkingRequestInformationMapperImpl;
 import com.utp.request.model.entity.Request;
@@ -30,8 +31,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -774,5 +777,117 @@ class RequestServiceImplTest {
 
     Mockito.verify(portalServiceClient, Mockito.never()).getUserById(11L);
     Mockito.verify(requestRepository, Mockito.never()).findAllByApplicantUserId(anyInt());
+  }
+
+  @Test
+  void testGetParkingAuthorization_ApprovedRequestInCurrentCycle_IsAuthorized() {
+    Vehicle vehicle = vehicle(100, APPLICANT_ID.intValue());
+
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 5))
+        .thenReturn(Mono.just(request(200, 100, 5, Constants.ID_STATUS_APPROVED)));
+    VehicleType vehicleType = new VehicleType();
+    vehicleType.setIdVehicleType(1);
+    vehicleType.setNameVehicleType("Automóvil");
+    when(vehicleTypeRepository.findById(1)).thenReturn(Mono.just(vehicleType));
+
+    StepVerifier.create(requestService.getParkingAuthorization("hnc-234"))
+        .assertNext(authorization -> {
+          assertEquals(true, authorization.getAuthorized());
+          assertEquals(ParkingAuthorizationResult.AUTHORIZED, authorization.getResult());
+          assertEquals(100, authorization.getIdVehicle());
+          assertEquals("HNC-234", authorization.getNumberPlate());
+          assertEquals(200, authorization.getIdRequest());
+          assertEquals("HNC-234", authorization.getVehicle().getNumberPlate());
+          assertEquals(CURRENT_CYCLE_NAME, authorization.getApplicant().getNumberCycle());
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingAuthorization_KeepsAuthorizingWhenApplicantIsNotReadable() {
+    Vehicle vehicle = vehicle(100, APPLICANT_ID.intValue());
+
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(vehicle));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 5))
+        .thenReturn(Mono.just(request(200, 100, 5, Constants.ID_STATUS_APPROVED)));
+    when(vehicleTypeRepository.findById(1)).thenReturn(Mono.empty());
+    when(portalServiceClient.getUserById(APPLICANT_ID))
+        .thenReturn(Mono.error(WebClientResponseException.create(403, "Forbidden",
+            HttpHeaders.EMPTY, new byte[0], null)));
+
+    StepVerifier.create(requestService.getParkingAuthorization("HNC-234"))
+        .assertNext(authorization -> {
+          assertEquals(true, authorization.getAuthorized());
+          assertEquals(ParkingAuthorizationResult.AUTHORIZED, authorization.getResult());
+          assertEquals(100, authorization.getIdVehicle());
+          assertEquals(CURRENT_CYCLE_NAME, authorization.getApplicant().getNumberCycle());
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingAuthorization_UnknownPlate_IsRejected() {
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.empty());
+
+    StepVerifier.create(requestService.getParkingAuthorization("HNC-234"))
+        .assertNext(authorization -> {
+          assertEquals(false, authorization.getAuthorized());
+          assertEquals(ParkingAuthorizationResult.VEHICLE_NOT_FOUND, authorization.getResult());
+          assertEquals(null, authorization.getIdVehicle());
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingAuthorization_UnassignedVehicle_IsRejectedButResolvesVehicle() {
+    Vehicle unassigned = vehicle(100, null);
+    unassigned.setIdVehicleStatus(Constants.ID_VEHICLE_STATUS_UNASSIGNED);
+
+    when(vehicleRepository.findByNumberPlate("HNC-234")).thenReturn(Mono.just(unassigned));
+
+    StepVerifier.create(requestService.getParkingAuthorization("HNC-234"))
+        .assertNext(authorization -> {
+          assertEquals(false, authorization.getAuthorized());
+          assertEquals(ParkingAuthorizationResult.VEHICLE_UNASSIGNED, authorization.getResult());
+          assertEquals(100, authorization.getIdVehicle());
+        })
+        .verifyComplete();
+
+    Mockito.verify(portalServiceClient, Mockito.never()).getCurrentCycle();
+  }
+
+  @Test
+  void testGetParkingAuthorization_WithoutApprovedRequest_IsRejected() {
+    when(vehicleRepository.findByNumberPlate("HNC-234"))
+        .thenReturn(Mono.just(vehicle(100, APPLICANT_ID.intValue())));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 5))
+        .thenReturn(Mono.just(request(200, 100, 5, Constants.ID_STATUS_IN_REVISION)));
+
+    StepVerifier.create(requestService.getParkingAuthorization("HNC-234"))
+        .assertNext(authorization -> {
+          assertEquals(false, authorization.getAuthorized());
+          assertEquals(ParkingAuthorizationResult.REQUEST_NOT_APPROVED, authorization.getResult());
+          assertEquals(100, authorization.getIdVehicle());
+        })
+        .verifyComplete();
+  }
+
+  @Test
+  void testGetParkingAuthorization_WithoutRequestInCurrentCycle_IsRejected() {
+    when(vehicleRepository.findByNumberPlate("HNC-234"))
+        .thenReturn(Mono.just(vehicle(100, APPLICANT_ID.intValue())));
+    when(portalServiceClient.getCurrentCycle()).thenReturn(Mono.just(cycle(5)));
+    when(requestRepository.findByIdVehicleAndIdCycle(100, 5)).thenReturn(Mono.empty());
+
+    StepVerifier.create(requestService.getParkingAuthorization("HNC-234"))
+        .assertNext(authorization -> {
+          assertEquals(false, authorization.getAuthorized());
+          assertEquals(ParkingAuthorizationResult.REQUEST_NOT_APPROVED, authorization.getResult());
+        })
+        .verifyComplete();
   }
 }

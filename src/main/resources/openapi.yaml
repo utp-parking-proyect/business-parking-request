@@ -15,6 +15,8 @@ tags:
     description: Parking response data controller
   - name: Vehicle Controller
     description: Applicant vehicle data controller
+  - name: Access Control Controller
+    description: Physical parking access control and availability
 paths:
   /request/acceptor/{acceptorId}:
     get:
@@ -392,6 +394,81 @@ paths:
                 $ref: '#/components/schemas/ApiException'
         '409':
           description: La solicitud no se encuentra en un estado válido para ser reenviada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /request/authorization/{numberPlate}:
+    get:
+      operationId: getParkingAuthorization
+      summary: Consulta si la placa indicada cuenta con autorización vigente de estacionamiento.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Resuelve, a partir de una placa, el vehículo y su autorización de ingreso al estacionamiento
+        en el ciclo actual. Es el contrato que consume `business-parking-control` para validar el
+        ingreso físico de un vehículo, de modo que el control de acceso no necesite conocer las
+        tablas de vehículos ni de solicitudes.
+
+        La operación siempre responde `200` cuando la consulta se pudo resolver: el campo `result`
+        indica el motivo de negocio cuando `authorized` es `false`. `idVehicle` se devuelve siempre
+        que la placa exista, incluso si no está autorizada, porque el control de acceso lo necesita
+        para registrar la salida de un vehículo cuya autorización ya venció.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Request Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: numberPlate
+          in: path
+          description: Placa del vehículo.
+          required: true
+          schema:
+            type: string
+            example: ABC-123
+      responses:
+        '200':
+          description: Resultado de la validación de autorización.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingAuthorization'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El usuario autenticado no tiene el rol ROLE_SECURITY.
           content:
             application/json:
               schema:
@@ -920,6 +997,286 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiException'
+  /control/entry:
+    post:
+      operationId: registerParkingEntry
+      summary: Registra el ingreso de un vehículo al estacionamiento de una sede.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Valida y registra el ingreso físico de un vehículo. Personal de Seguridad indica la placa y
+        la sede donde se encuentra la puerta. El servicio valida, en este orden, que el vehículo
+        exista, que esté asignado a un usuario, que cuente con autorización vigente, que no se
+        encuentre ya dentro de un estacionamiento y que la sede tenga espacios disponibles.
+
+        Cuando el ingreso es autorizado se crea un record de permanencia con la fecha de ingreso y
+        el usuario de Seguridad que lo registró, y se publica la nueva disponibilidad de la sede a
+        los clientes conectados por WebSocket.
+
+        Las validaciones de negocio no se devuelven como error: la operación responde `200` con
+        `authorized` en `false` y el motivo en `result`, para que la interfaz de la puerta muestre
+        siempre una respuesta accionable.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Access Control Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessControlIn'
+        required: true
+      responses:
+        '200':
+          description: Resultado del intento de ingreso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessControlOut'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El usuario autenticado no tiene el rol ROLE_SECURITY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: La sede indicada no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /control/exit:
+    post:
+      operationId: registerParkingExit
+      summary: Registra la salida de un vehículo del estacionamiento de una sede.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Cierra el record de permanencia abierto del vehículo indicado registrando su fecha de
+        salida, y publica la nueva disponibilidad de la sede por WebSocket.
+
+        La salida no exige autorización vigente: un vehículo que ya se encuentra dentro siempre
+        debe poder salir. Si el vehículo no tiene un record abierto, o su record abierto pertenece
+        a otra sede, la operación responde `200` con `authorized` en `false` y el motivo en
+        `result`.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Access Control Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+      requestBody:
+        description: Entrada del Servicio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessControlIn'
+        required: true
+      responses:
+        '200':
+          description: Resultado del intento de salida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessControlOut'
+        '400':
+          description: Los datos proporcionados no son válidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '403':
+          description: El usuario autenticado no tiene el rol ROLE_SECURITY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: La sede indicada no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /control/availability:
+    get:
+      operationId: getParkingAvailability
+      summary: Obtiene la disponibilidad actual de los estacionamientos de todas las sedes.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Devuelve el estado inicial que renderiza el frontend al abrir la pantalla de
+        disponibilidad. La ocupación no se almacena: se calcula contando los records de
+        permanencia sin fecha de salida de cada sede, y la disponibilidad es la capacidad de la
+        sede menos esa ocupación, nunca menor a cero.
+
+        Una vez obtenido este estado inicial, los cambios posteriores llegan por WebSocket en
+        `/control/availability/ws`, cuyos eventos usan el esquema `LocationAvailability`. El
+        WebSocket no reemplaza a esta operación: la complementa.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Access Control Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+      responses:
+        '200':
+          description: Disponibilidad actual de cada sede.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkingAvailabilityList'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+  /control/availability/{locationId}:
+    get:
+      operationId: getLocationAvailability
+      summary: Obtiene la disponibilidad actual del estacionamiento de una sede.
+      description: |-
+        ### Acerca de la funcionalidad expuesta
+        Devuelve la disponibilidad calculada de una sede específica. La usa la interfaz de
+        Seguridad, que trabaja siempre sobre la sede donde está ubicada su puerta.
+
+        ### Data de Prueba
+        No aplica.
+      tags:
+        - Access Control Controller
+      parameters:
+        - $ref: '#/components/parameters/Request-ID'
+        - $ref: '#/components/parameters/request-date'
+        - $ref: '#/components/parameters/app-code'
+        - $ref: '#/components/parameters/caller-name'
+        - name: locationId
+          in: path
+          description: ID de la sede.
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Disponibilidad actual de la sede.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationAvailability'
+        '401':
+          description: No está autorizado para consumir el API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '404':
+          description: La sede indicada no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '500':
+          description: Ocurrió un error inesperado. Por favor contactarse con Soporte T&eacute;cnico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '503':
+          description: El servicio no se encuentra disponible. Por favor reintente más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
+        '504':
+          description: Se superó el tiempo de respuesta interna.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiException'
 components:
   schemas:
     ParkingRequestInformation:
@@ -1223,6 +1580,198 @@ components:
           description: Lista de solicitudes de ingreso al estacionamiento.
           items:
             $ref: '#/components/schemas/ParkingRequestInformation'
+    ParkingAuthorizationResult:
+      type: string
+      description: >-
+        Motivo de negocio del resultado de la validación de autorización. AUTHORIZED: el vehículo
+        cuenta con una solicitud aprobada vigente. VEHICLE_NOT_FOUND: la placa no está registrada.
+        VEHICLE_UNASSIGNED: el vehículo ya no pertenece a ningún usuario. REQUEST_NOT_APPROVED: el
+        vehículo no tiene una solicitud aprobada en el ciclo actual.
+      enum:
+        - AUTHORIZED
+        - VEHICLE_NOT_FOUND
+        - VEHICLE_UNASSIGNED
+        - REQUEST_NOT_APPROVED
+      example: AUTHORIZED
+    ParkingAuthorization:
+      type: object
+      description: Autorización de ingreso al estacionamiento resuelta a partir de una placa.
+      properties:
+        authorized:
+          type: boolean
+          description: Indica si el vehículo cuenta con autorización vigente para ingresar.
+          example: true
+        result:
+          $ref: '#/components/schemas/ParkingAuthorizationResult'
+        idVehicle:
+          type: integer
+          description: >-
+            Identificador del vehículo. Se devuelve siempre que la placa exista, aunque no esté
+            autorizada.
+          example: 25
+          nullable: true
+        numberPlate:
+          type: string
+          description: Placa consultada, normalizada.
+          example: ABC-123
+        idRequest:
+          type: integer
+          description: Identificador de la solicitud aprobada que sustenta la autorización.
+          example: 1
+          nullable: true
+        vehicle:
+          $ref: '#/components/schemas/VehicleInformation'
+        applicant:
+          $ref: '#/components/schemas/ApplicantInformation'
+    AccessControlIn:
+      type: object
+      required:
+        - numberPlate
+        - locationId
+      properties:
+        numberPlate:
+          type: string
+          description: Placa del vehículo que se presenta en la puerta.
+          example: ABC-123
+        locationId:
+          type: integer
+          description: Identificador de la sede donde se registra el movimiento.
+          example: 1
+        observation:
+          type: string
+          maxLength: 500
+          description: Observación opcional registrada por Personal de Seguridad.
+          example: Ingreso por puerta principal.
+    AccessControlResult:
+      type: string
+      description: >-
+        Resultado del movimiento registrado en la puerta. ENTRY_REGISTERED y EXIT_REGISTERED son
+        los únicos resultados satisfactorios. VEHICLE_ALREADY_INSIDE: el vehículo ya tiene un
+        record abierto. PARKING_FULL: la sede no tiene espacios disponibles. NO_OPEN_RECORD: el
+        vehículo no se encuentra dentro del estacionamiento. RECORD_AT_OTHER_LOCATION: el vehículo
+        ingresó por otra sede y debe salir por ella.
+      enum:
+        - ENTRY_REGISTERED
+        - EXIT_REGISTERED
+        - VEHICLE_NOT_FOUND
+        - VEHICLE_UNASSIGNED
+        - REQUEST_NOT_APPROVED
+        - VEHICLE_ALREADY_INSIDE
+        - PARKING_FULL
+        - NO_OPEN_RECORD
+        - RECORD_AT_OTHER_LOCATION
+      example: ENTRY_REGISTERED
+    AccessControlOut:
+      type: object
+      description: Resultado de un intento de ingreso o de salida en la puerta de una sede.
+      properties:
+        authorized:
+          type: boolean
+          description: Indica si el movimiento fue registrado.
+          example: true
+        result:
+          $ref: '#/components/schemas/AccessControlResult'
+        message:
+          type: string
+          description: Mensaje de negocio listo para mostrarse a Personal de Seguridad.
+          example: Ingreso autorizado
+        vehicle:
+          $ref: '#/components/schemas/VehicleInformation'
+        applicant:
+          $ref: '#/components/schemas/ApplicantInformation'
+        location:
+          $ref: '#/components/schemas/LocationInformation'
+        availability:
+          $ref: '#/components/schemas/LocationAvailability'
+        record:
+          $ref: '#/components/schemas/AccessRecord'
+    AccessRecord:
+      type: object
+      description: Permanencia de un vehículo dentro de una sede.
+      properties:
+        idRecord:
+          type: integer
+          description: Identificador del record de permanencia.
+          example: 1
+        entryDate:
+          type: string
+          description: Fecha y hora de ingreso.
+          example: '2026-08-15T08:30:00'
+        departureDate:
+          type: string
+          description: Fecha y hora de salida. Mientras sea nula, el vehículo está dentro.
+          example: '2026-08-15T18:05:00'
+          nullable: true
+    LocationInformation:
+      type: object
+      description: Sede donde se registra el movimiento.
+      properties:
+        idLocation:
+          type: integer
+          description: Identificador de la sede.
+          example: 1
+        nameLocation:
+          type: string
+          description: Nombre de la sede.
+          example: Sede Arequipa
+        address:
+          type: string
+          description: Dirección de la sede.
+          example: Av. Arequipa 265 - 279
+        campusName:
+          type: string
+          description: Campus al que pertenece la sede.
+          example: Lima Centro
+          nullable: true
+    LocationAvailability:
+      type: object
+      description: >-
+        Disponibilidad calculada del estacionamiento de una sede. Es también el esquema de los
+        eventos publicados por el WebSocket `/control/availability/ws`, de modo que el frontend
+        actualice únicamente la sede afectada.
+      properties:
+        locationId:
+          type: integer
+          description: Identificador de la sede.
+          example: 1
+        locationName:
+          type: string
+          description: Nombre de la sede.
+          example: Sede Arequipa
+        campusId:
+          type: integer
+          description: Identificador del campus de la sede.
+          example: 1
+          nullable: true
+        campusName:
+          type: string
+          description: Nombre del campus de la sede.
+          example: Lima Centro
+          nullable: true
+        capacity:
+          type: integer
+          description: Capacidad máxima de la sede.
+          example: 75
+        occupied:
+          type: integer
+          description: Cantidad de vehículos actualmente dentro, calculada desde los records abiertos.
+          example: 43
+        available:
+          type: integer
+          description: Espacios disponibles. Nunca es negativo.
+          example: 32
+        updatedAt:
+          type: string
+          description: Fecha y hora en que se calculó la disponibilidad.
+          example: '2026-08-15T08:30:00'
+    ParkingAvailabilityList:
+      type: object
+      properties:
+        availability:
+          type: array
+          description: Disponibilidad de cada sede.
+          items:
+            $ref: '#/components/schemas/LocationAvailability'
     ApiException:
       title: ApiException
       type: object

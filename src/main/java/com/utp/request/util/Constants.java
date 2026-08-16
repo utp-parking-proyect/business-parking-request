@@ -29,6 +29,7 @@ public final class Constants {
   public static final Integer MAX_REQUESTS_PER_CYCLE = 2;
 
   public static final String ROLE_NAME_SAE = "ROLE_SAE";
+  public static final String ROLE_NAME_SECURITY = "ROLE_SECURITY";
 
   public static final String NAME_MICROSERVICE = "business-parking-request";
 

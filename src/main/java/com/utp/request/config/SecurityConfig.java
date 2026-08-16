@@ -3,6 +3,7 @@ package com.utp.request.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -20,11 +21,15 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+  private static final String PARKING_AUTHORIZATION_PATH = "/request/authorization/**";
+  private static final String ROLE_SECURITY = "ROLE_SECURITY";
+
   @Bean
   SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
     return http
         .authorizeExchange(auth -> auth
             .pathMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+            .pathMatchers(HttpMethod.GET, PARKING_AUTHORIZATION_PATH).hasAuthority(ROLE_SECURITY)
             .anyExchange().authenticated())
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
