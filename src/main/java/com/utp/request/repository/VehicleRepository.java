@@ -12,12 +12,15 @@ public interface VehicleRepository extends R2dbcRepository<Vehicle, Integer> {
 
   Mono<Vehicle> findByNumberPlate(String numberPlate);
 
+  Mono<Long> countByIdUserAndIdVehicleStatus(Integer idUser, Integer idVehicleStatus);
+
   @Query(value = """
-      INSERT INTO vehicles (id_vehicle_type, id_user, number_plate, active)
-      VALUES (:idVehicleType, :idUser, :numberPlate, true)
+      INSERT INTO vehicles (id_vehicle_type, id_user, number_plate, id_vehicle_status)
+      VALUES (:idVehicleType, :idUser, :numberPlate, :idVehicleStatus)
       RETURNING id_vehicle;
       """)
   Mono<Integer> insertVehicle(@Param("idVehicleType") Integer idVehicleType,
                               @Param("idUser") Integer idUser,
-                              @Param("numberPlate") String numberPlate);
+                              @Param("numberPlate") String numberPlate,
+                              @Param("idVehicleStatus") Integer idVehicleStatus);
 }

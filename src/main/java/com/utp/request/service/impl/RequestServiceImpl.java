@@ -4,10 +4,14 @@ import com.utp.request.client.portal.PortalServiceClient;
 import com.utp.request.generated.client.users.model.CycleResponse;
 import com.utp.request.generated.client.users.model.UserResponse;
 import com.utp.request.generated.model.ApplicantInformation;
+import com.utp.request.generated.model.ParkingAuthorization;
+import com.utp.request.generated.model.ParkingAuthorizationResult;
+import com.utp.request.generated.model.ParkingRequestDetail;
 import com.utp.request.generated.model.ParkingRequestIn;
 import com.utp.request.generated.model.ParkingRequestInformation;
 import com.utp.request.generated.model.ParkingRequestInformationList;
 import com.utp.request.generated.model.VehicleInformation;
+import com.utp.request.generated.model.WorkflowEntry;
 import com.utp.request.mapper.ParkingRequestInformationMapper;
 import com.utp.request.model.entity.Request;
 import com.utp.request.model.entity.Status;
@@ -18,8 +22,11 @@ import com.utp.request.repository.StatusRepository;
 import com.utp.request.repository.VehicleRepository;
 import com.utp.request.repository.VehicleTypeRepository;
 import com.utp.request.repository.WorkflowRepository;
+import com.utp.request.service.AcceptorSelector;
 import com.utp.request.service.RequestService;
+import com.utp.request.service.WorkflowService;
 import com.utp.request.util.Constants;
+import com.utp.request.util.NumberPlateValidator;
 import com.utp.request.util.error.ConflictException;
 import com.utp.request.util.error.ForbiddenException;
 import com.utp.request.util.error.NotFoundException;
@@ -30,13 +37,11 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -51,6 +56,8 @@ public class RequestServiceImpl implements RequestService {
   private final StatusRepository statusRepository;
   private final VehicleTypeRepository vehicleTypeRepository;
   private final PortalServiceClient portalServiceClient;
+  private final AcceptorSelector acceptorSelector;
+  private final WorkflowService workflowService;
   private final TransactionalOperator transactionalOperator;
   private final ParkingRequestInformationMapper parkingRequestInformationMapper;
 
@@ -59,15 +66,27 @@ public class RequestServiceImpl implements RequestService {
     Integer userId = authenticatedUserId.intValue();
     return Mono.zip(portalServiceClient.getCurrentCycle(), portalServiceClient.getUserById(authenticatedUserId))
         .flatMap(tuple -> createRequestForCycle(userId, request, tuple.getT1().getIdCycle().intValue(),
-                resolveCampusId(tuple.getT2()))
+            resolveCampusId(tuple.getT2()))
             .as(transactionalOperator::transactional));
   }
 
   private Mono<Request> createRequestForCycle(Integer userId, ParkingRequestIn request, Integer idCycle,
-      Long idCampus) {
-    return resolveVehicle(userId, request.getNumberPlate(), request.getVehicleType())
+                                              Long idCampus) {
+    String numberPlate = NumberPlateValidator.normalize(request.getNumberPlate());
+
+    return validateRequestsPerCycleLimit(userId, idCycle)
+        .then(Mono.defer(() -> resolveVehicle(userId, numberPlate, request.getVehicleType())))
         .flatMap(vehicle -> validateNoActiveRequest(vehicle.getIdVehicle(), idCycle)
-            .then(Mono.defer(() -> createRequestWithWorkflow(vehicle.getIdVehicle(), idCycle, idCampus))));
+            .then(Mono.defer(() -> createRequestWithWorkflow(vehicle.getIdVehicle(), userId, idCycle,
+                idCampus))));
+  }
+
+  private Mono<Void> validateRequestsPerCycleLimit(Integer userId, Integer idCycle) {
+    return requestRepository.countByApplicantUserIdAndIdCycle(userId, idCycle)
+        .defaultIfEmpty(0L)
+        .flatMap(count -> count >= Constants.MAX_REQUESTS_PER_CYCLE
+            ? Mono.error(new ConflictException(Constants.ERROR_MAX_REQUESTS_PER_CYCLE_REACHED))
+            : Mono.empty());
   }
 
   @Override
@@ -79,19 +98,19 @@ public class RequestServiceImpl implements RequestService {
 
     return Mono.zip(portalServiceClient.getCurrentCycle(), portalServiceClient.getUserById(authenticatedUserId))
         .flatMap(tuple -> resubmitRequestForCycle(userId, requestId, resolvedObservation,
-                tuple.getT1().getIdCycle().intValue(), resolveCampusId(tuple.getT2()))
+            tuple.getT1().getIdCycle().intValue(), resolveCampusId(tuple.getT2()))
             .as(transactionalOperator::transactional));
   }
 
   private Mono<Request> resubmitRequestForCycle(Integer userId, Integer requestId, String observation,
-      Integer currentIdCycle, Long idCampus) {
+                                                Integer currentIdCycle, Long idCampus) {
     return requestRepository.findById(requestId)
         .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
         .flatMap(existing -> validateResubmit(userId, existing, currentIdCycle)
             .then(Mono.defer(() -> {
               LocalDateTime now = LocalDateTime.now();
-              return requestRepository.updateStatusAndResponse(requestId, Constants.ID_STATUS_REGISTERED, null)
-                  .then(workflowRepository.saveWorkflow(requestId, Constants.ID_STATUS_REGISTERED, now,
+              return requestRepository.updateStatusAndResponse(requestId, Constants.ID_STATUS_RESUBMITTED, null)
+                  .then(workflowRepository.saveWorkflow(requestId, Constants.ID_STATUS_RESUBMITTED, now,
                       observation))
                   .then(Mono.defer(() -> assignAcceptor(requestId, idCampus)))
                   .then(Mono.defer(() -> requestRepository.findById(requestId)));
@@ -103,33 +122,176 @@ public class RequestServiceImpl implements RequestService {
   }
 
   @Override
-  public Mono<ParkingRequestInformationList> getParkingRequestsByAcceptor(Integer acceptorId) {
-    return portalServiceClient.getUserById(acceptorId.longValue())
-        .onErrorResume(WebClientResponseException.NotFound.class, e -> Mono.empty())
-        .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_ACCEPTOR_NOT_FOUND)))
-        .flatMap(this::validateSae)
-        .thenMany(requestRepository.findAllByIdAcceptor(acceptorId))
-        .collectList()
-        .flatMap(this::buildInformationList);
+  public Mono<ParkingRequestInformationList> getParkingRequestsByAcceptor(Long authenticatedUserId,
+                                                                          Integer acceptorId) {
+    return validateSelf(authenticatedUserId, acceptorId, Constants.ERROR_NOT_ACCEPTOR)
+        .then(Mono.defer(() -> portalServiceClient.getUserById(acceptorId.longValue())
+            .onErrorResume(WebClientResponseException.NotFound.class, e -> Mono.empty())
+            .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_ACCEPTOR_NOT_FOUND)))
+            .flatMap(this::validateSae)
+            .thenMany(requestRepository.findAllByIdAcceptor(acceptorId))
+            .collectList()
+            .flatMap(this::buildInformationList)));
   }
 
   @Override
-  public Mono<ParkingRequestInformationList> getParkingRequestsByApplicant(Integer applicantId) {
-    return portalServiceClient.getUserById(applicantId.longValue())
-        .onErrorResume(WebClientResponseException.NotFound.class, e -> Mono.empty())
-        .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_APPLICANT_NOT_FOUND)))
-        .thenMany(requestRepository.findAllByApplicantUserId(applicantId))
-        .collectList()
-        .flatMap(this::buildInformationList);
+  public Mono<ParkingRequestInformationList> getParkingRequestsByApplicant(Long authenticatedUserId,
+                                                                           Integer applicantId) {
+    return validateSelf(authenticatedUserId, applicantId, Constants.ERROR_NOT_APPLICANT)
+        .then(Mono.defer(() -> portalServiceClient.getUserById(applicantId.longValue())
+            .onErrorResume(WebClientResponseException.NotFound.class, e -> Mono.empty())
+            .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_APPLICANT_NOT_FOUND)))
+            .thenMany(requestRepository.findAllByApplicantUserId(applicantId))
+            .collectList()
+            .flatMap(this::buildInformationList)));
+  }
+
+  @Override
+  public Mono<ParkingRequestDetail> getParkingRequestById(Long authenticatedUserId,
+                                                          Integer requestId) {
+    return requestRepository.findById(requestId)
+        .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
+        .flatMap(request -> validateDetailAccess(authenticatedUserId, request)
+            .then(Mono.defer(() -> buildDetail(request))));
+  }
+
+  @Override
+  public Mono<ParkingAuthorization> getParkingAuthorization(String numberPlate) {
+    String normalizedPlate = NumberPlateValidator.normalize(numberPlate);
+
+    return vehicleRepository.findByNumberPlate(normalizedPlate)
+        .flatMap(vehicle -> resolveAuthorization(normalizedPlate, vehicle))
+        .switchIfEmpty(Mono.fromSupplier(() -> {
+          log.info("Parking authorization requested for unknown plate - NumberPlate: {}",
+              normalizedPlate);
+          return rejectedAuthorization(normalizedPlate, null,
+              ParkingAuthorizationResult.VEHICLE_NOT_FOUND);
+        }));
+  }
+
+  private Mono<ParkingAuthorization> resolveAuthorization(String numberPlate, Vehicle vehicle) {
+    if (!Constants.ID_VEHICLE_STATUS_ASSIGNED.equals(vehicle.getIdVehicleStatus())) {
+      return Mono.just(rejectedAuthorization(numberPlate, vehicle,
+          ParkingAuthorizationResult.VEHICLE_UNASSIGNED));
+    }
+
+    return portalServiceClient.getCurrentCycle()
+        .flatMap(cycle -> requestRepository
+            .findByIdVehicleAndIdCycle(vehicle.getIdVehicle(), cycle.getIdCycle().intValue())
+            .filter(request -> Constants.ID_STATUS_APPROVED.equals(request.getIdStatus()))
+            .flatMap(request -> approvedAuthorization(numberPlate, vehicle, request, cycle))
+            .switchIfEmpty(Mono.fromSupplier(() -> rejectedAuthorization(numberPlate, vehicle,
+                ParkingAuthorizationResult.REQUEST_NOT_APPROVED))));
+  }
+
+  private Mono<ParkingAuthorization> approvedAuthorization(String numberPlate, Vehicle vehicle,
+                                                           Request request, CycleResponse cycle) {
+    Mono<VehicleType> vehicleTypeMono = vehicleTypeRepository.findById(vehicle.getIdVehicleType());
+    Mono<UserResponse> applicantMono = portalServiceClient
+        .getUserById(request.getIdApplicant().longValue())
+        .onErrorResume(error -> {
+          log.error("No se pudo obtener al solicitante {} desde business-core-portal: {}",
+              request.getIdApplicant(), error.getMessage());
+          return Mono.empty();
+        });
+
+    return Mono.zip(vehicleTypeMono.map(Optional::of).defaultIfEmpty(Optional.empty()),
+            applicantMono.map(Optional::of).defaultIfEmpty(Optional.empty()))
+        .map(tuple -> new ParkingAuthorization()
+            .authorized(true)
+            .result(ParkingAuthorizationResult.AUTHORIZED)
+            .idVehicle(vehicle.getIdVehicle())
+            .numberPlate(numberPlate)
+            .idRequest(request.getIdRequest())
+            .vehicle(parkingRequestInformationMapper
+                .toVehicleInformation(vehicle, tuple.getT1().orElse(null)))
+            .applicant(parkingRequestInformationMapper
+                .toApplicantInformation(tuple.getT2().orElse(null), cycle)));
+  }
+
+  private ParkingAuthorization rejectedAuthorization(String numberPlate, Vehicle vehicle,
+                                                     ParkingAuthorizationResult result) {
+    return new ParkingAuthorization()
+        .authorized(false)
+        .result(result)
+        .idVehicle(vehicle == null ? null : vehicle.getIdVehicle())
+        .numberPlate(numberPlate);
+  }
+
+  private Mono<Void> validateDetailAccess(Long authenticatedUserId, Request request) {
+    if (isSameUser(authenticatedUserId, request.getIdAcceptor())) {
+      return Mono.empty();
+    }
+
+    return isSameUser(authenticatedUserId, request.getIdApplicant())
+        ? Mono.empty()
+        : Mono.error(new ForbiddenException(Constants.ERROR_REQUEST_NOT_OWNED));
+  }
+
+  private boolean isSameUser(Long authenticatedUserId, Integer userId) {
+    return userId != null && authenticatedUserId.equals(userId.longValue());
+  }
+
+  private Mono<ParkingRequestDetail> buildDetail(Request request) {
+    return Mono.zip(
+            buildInformationList(List.of(request)).map(list -> list.getParkingRequests().getFirst()),
+            workflowService.toEntries(workflowRepository.findAllByRequestId(request.getIdRequest())))
+        .map(tuple -> toDetail(tuple.getT1(), tuple.getT2()));
+  }
+
+  private ParkingRequestDetail toDetail(ParkingRequestInformation information,
+                                        List<WorkflowEntry> workflow) {
+    return new ParkingRequestDetail()
+        .idRequest(information.getIdRequest())
+        .applicant(information.getApplicant())
+        .vehicle(information.getVehicle())
+        .dateRequest(information.getDateRequest())
+        .dateResponse(information.getDateResponse())
+        .status(information.getStatus())
+        .workflow(workflow);
+  }
+
+  private Mono<Void> validateSelf(Long authenticatedUserId, Integer requestedUserId,
+                                  String errorMessage) {
+    return requestedUserId != null && authenticatedUserId.equals(requestedUserId.longValue())
+        ? Mono.empty()
+        : Mono.error(new ForbiddenException(errorMessage));
   }
 
   private Mono<Vehicle> resolveVehicle(Integer userId, String numberPlate, Integer idVehicleType) {
     return vehicleRepository.findByNumberPlate(numberPlate)
-        .flatMap(vehicle -> vehicle.getIdUser().equals(userId)
-            ? Mono.just(vehicle)
-            : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER)))
-        .switchIfEmpty(Mono.defer(() -> vehicleRepository.insertVehicle(idVehicleType, userId, numberPlate)
-            .flatMap(vehicleRepository::findById)));
+        .flatMap(vehicle -> {
+          if (vehicle.getIdUser() == null) {
+            return Mono.error(new ConflictException(Constants.ERROR_PLATE_REGISTERED_UNASSIGNED));
+          }
+          return userId.equals(vehicle.getIdUser())
+              ? validateVehicleIsAssigned(vehicle)
+              : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER));
+        })
+        .switchIfEmpty(Mono.defer(() -> registerVehicle(userId, numberPlate, idVehicleType)));
+  }
+
+  private Mono<Vehicle> registerVehicle(Integer userId, String numberPlate, Integer idVehicleType) {
+    return NumberPlateValidator.validate(numberPlate, idVehicleType)
+        .then(Mono.defer(() -> validateAssignedVehicleLimit(userId)))
+        .then(Mono.defer(() -> vehicleRepository.insertVehicle(idVehicleType, userId, numberPlate,
+            Constants.ID_VEHICLE_STATUS_ASSIGNED)))
+        .flatMap(vehicleRepository::findById);
+  }
+
+  private Mono<Void> validateAssignedVehicleLimit(Integer userId) {
+    return vehicleRepository
+        .countByIdUserAndIdVehicleStatus(userId, Constants.ID_VEHICLE_STATUS_ASSIGNED)
+        .defaultIfEmpty(0L)
+        .flatMap(assigned -> assigned >= Constants.MAX_ASSIGNED_VEHICLES_PER_USER
+            ? Mono.error(new ConflictException(Constants.ERROR_MAX_ASSIGNED_VEHICLES_REACHED))
+            : Mono.empty());
+  }
+
+  private Mono<Vehicle> validateVehicleIsAssigned(Vehicle vehicle) {
+    return Constants.ID_VEHICLE_STATUS_ASSIGNED.equals(vehicle.getIdVehicleStatus())
+        ? Mono.just(vehicle)
+        : Mono.error(new ConflictException(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED));
   }
 
   private Mono<Void> validateNoActiveRequest(Integer idVehicle, Integer idCycle) {
@@ -140,9 +302,11 @@ public class RequestServiceImpl implements RequestService {
         .then();
   }
 
-  private Mono<Request> createRequestWithWorkflow(Integer idVehicle, Integer idCycle, Long idCampus) {
+  private Mono<Request> createRequestWithWorkflow(Integer idVehicle, Integer idApplicant,
+                                                 Integer idCycle, Long idCampus) {
     LocalDateTime now = LocalDateTime.now();
-    return requestRepository.insertRequest(idVehicle, idCycle, Constants.ID_STATUS_REGISTERED, now)
+    return requestRepository.insertRequest(idVehicle, idApplicant, idCycle,
+            Constants.ID_STATUS_REGISTERED, now)
         .flatMap(requestId -> workflowRepository
             .saveWorkflow(requestId, Constants.ID_STATUS_REGISTERED, now, Constants.OBSERVATION_REGISTERED)
             .then(Mono.defer(() -> assignAcceptor(requestId, idCampus)))
@@ -150,17 +314,23 @@ public class RequestServiceImpl implements RequestService {
   }
 
   private Mono<Void> validateResubmit(Integer userId, Request existing, Integer currentIdCycle) {
-    return validateVehicleOwnership(userId, existing.getIdVehicle())
-        .then(Mono.defer(() -> validateCurrentCycle(existing.getIdCycle(), currentIdCycle)))
-        .then(Mono.defer(() -> validateRejectedStatus(existing.getIdStatus())));
+    return findOwnedVehicle(userId, existing.getIdVehicle())
+        .flatMap(vehicle -> validateCurrentCycle(existing.getIdCycle(), currentIdCycle)
+            .then(Mono.defer(() -> validateVehicleIsAssigned(vehicle)))
+            .then(Mono.defer(() -> validateRejectedStatus(existing.getIdStatus()))));
   }
 
-  private Mono<Void> validateVehicleOwnership(Integer userId, Integer idVehicle) {
+  private Mono<Vehicle> findOwnedVehicle(Integer userId, Integer idVehicle) {
     return vehicleRepository.findById(idVehicle)
         .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
-        .flatMap(vehicle -> vehicle.getIdUser().equals(userId)
-            ? Mono.empty()
-            : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER)));
+        .flatMap(vehicle -> {
+          if (vehicle.getIdUser() == null) {
+            return Mono.error(new ConflictException(Constants.ERROR_VEHICLE_ALREADY_UNASSIGNED));
+          }
+          return userId.equals(vehicle.getIdUser())
+              ? Mono.just(vehicle)
+              : Mono.error(new ForbiddenException(Constants.ERROR_VEHICLE_OWNED_BY_ANOTHER_USER));
+        });
   }
 
   private Mono<Void> validateCurrentCycle(Integer idCycle, Integer currentIdCycle) {
@@ -177,16 +347,7 @@ public class RequestServiceImpl implements RequestService {
   }
 
   private Mono<Void> assignAcceptor(Integer requestId, Long idCampus) {
-    return portalServiceClient.getEligibleAcceptors(idCampus)
-        .flatMap(acceptor -> requestRepository
-            .countByIdAcceptorAndIdStatus(acceptor.getIdUser().intValue(), Constants.ID_STATUS_IN_REVISION)
-            .map(count -> Tuples.of(acceptor.getIdUser().intValue(), count)))
-        .collectList()
-        .flatMap(counts -> counts.stream()
-            .min(Comparator.comparing(Tuple2::getT2))
-            .map(Tuple2::getT1)
-            .map(Mono::just)
-            .orElseGet(() -> Mono.error(new ConflictException(Constants.ERROR_NO_ACCEPTOR_AVAILABLE))))
+    return acceptorSelector.selectLeastLoaded(idCampus)
         .flatMap(acceptorId -> {
           log.info("Assigning acceptor {} to request {}", acceptorId, requestId);
           return requestRepository.updateAcceptorAndStatus(requestId, acceptorId, Constants.ID_STATUS_IN_REVISION)
@@ -226,8 +387,8 @@ public class RequestServiceImpl implements RequestService {
 
           Set<Integer> vehicleTypeIds = vehicles.values().stream()
               .map(Vehicle::getIdVehicleType).collect(Collectors.toSet());
-          Set<Long> userIds = vehicles.values().stream()
-              .map(vehicle -> vehicle.getIdUser().longValue()).collect(Collectors.toSet());
+          Set<Long> userIds = requests.stream()
+              .map(request -> request.getIdApplicant().longValue()).collect(Collectors.toSet());
 
           Mono<Map<Integer, VehicleType>> vehicleTypesMono = vehicleTypeRepository.findAllById(vehicleTypeIds)
               .collectMap(VehicleType::getIdVehicleType);
@@ -241,8 +402,8 @@ public class RequestServiceImpl implements RequestService {
   }
 
   private ParkingRequestInformationList toInformationList(List<Request> requests,
-      Map<Integer, Vehicle> vehicles, Map<Integer, Status> statuses, Map<Integer, CycleResponse> cycles,
-      Map<Integer, VehicleType> vehicleTypes, Map<Long, UserResponse> users) {
+                                                          Map<Integer, Vehicle> vehicles, Map<Integer, Status> statuses, Map<Integer, CycleResponse> cycles,
+                                                          Map<Integer, VehicleType> vehicleTypes, Map<Long, UserResponse> users) {
     List<ParkingRequestInformation> items = requests.stream()
         .map(request -> toInformation(request, vehicles, statuses, cycles, vehicleTypes, users))
         .toList();
@@ -250,10 +411,10 @@ public class RequestServiceImpl implements RequestService {
   }
 
   private ParkingRequestInformation toInformation(Request request, Map<Integer, Vehicle> vehicles,
-      Map<Integer, Status> statuses, Map<Integer, CycleResponse> cycles, Map<Integer, VehicleType> vehicleTypes,
-      Map<Long, UserResponse> users) {
+                                                  Map<Integer, Status> statuses, Map<Integer, CycleResponse> cycles, Map<Integer, VehicleType> vehicleTypes,
+                                                  Map<Long, UserResponse> users) {
     Vehicle vehicle = vehicles.get(request.getIdVehicle());
-    UserResponse applicant = vehicle == null ? null : users.get(vehicle.getIdUser().longValue());
+    UserResponse applicant = users.get(request.getIdApplicant().longValue());
     VehicleType vehicleType = vehicle == null ? null : vehicleTypes.get(vehicle.getIdVehicleType());
     Status status = statuses.get(request.getIdStatus());
     CycleResponse cycle = cycles.get(request.getIdCycle());

@@ -1,6 +1,8 @@
 package com.utp.request.expose.web;
 
 import com.utp.request.generated.api.RequestApi;
+import com.utp.request.generated.model.ParkingAuthorization;
+import com.utp.request.generated.model.ParkingRequestDetail;
 import com.utp.request.generated.model.ParkingRequestIn;
 import com.utp.request.generated.model.ParkingRequestInformationList;
 import com.utp.request.generated.model.ParkingRequestOut;
@@ -77,8 +79,38 @@ public class RequestApiImplements implements RequestApi {
       String callerName,
       Integer acceptorId,
       ServerWebExchange exchange) {
-    return requestService.getParkingRequestsByAcceptor(acceptorId)
+    return authenticatedUserProvider.getAuthenticatedUserId()
+        .flatMap(userId -> requestService.getParkingRequestsByAcceptor(userId, acceptorId))
         .map(ResponseEntity::ok);
+  }
+
+  @Override
+  public Mono<ResponseEntity<ParkingRequestDetail>> getParkingRequestById(
+      String requestID,
+      String requestDate,
+      String appCode,
+      String callerName,
+      Integer requestId,
+      ServerWebExchange exchange) {
+    return authenticatedUserProvider.getAuthenticatedUserId()
+        .flatMap(userId -> requestService.getParkingRequestById(userId, requestId))
+        .map(ResponseEntity::ok);
+  }
+
+  @Override
+  public Mono<ResponseEntity<ParkingAuthorization>> getParkingAuthorization(
+      String requestID,
+      String requestDate,
+      String appCode,
+      String callerName,
+      String numberPlate,
+      ServerWebExchange exchange) {
+    return requestService.getParkingAuthorization(numberPlate)
+        .map(authorization -> {
+          log.info("Parking authorization resolved - NumberPlate: {}, result: {}",
+              authorization.getNumberPlate(), authorization.getResult());
+          return ResponseEntity.ok(authorization);
+        });
   }
 
   @Override
@@ -89,7 +121,8 @@ public class RequestApiImplements implements RequestApi {
       String callerName,
       Integer applicantId,
       ServerWebExchange exchange) {
-    return requestService.getParkingRequestsByApplicant(applicantId)
+    return authenticatedUserProvider.getAuthenticatedUserId()
+        .flatMap(userId -> requestService.getParkingRequestsByApplicant(userId, applicantId))
         .map(ResponseEntity::ok);
   }
 }
