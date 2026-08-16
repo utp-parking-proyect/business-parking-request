@@ -1,6 +1,7 @@
 package com.utp.request.expose.web;
 
 import com.utp.request.generated.api.RequestApi;
+import com.utp.request.generated.model.ParkingAuthorization;
 import com.utp.request.generated.model.ParkingRequestDetail;
 import com.utp.request.generated.model.ParkingRequestIn;
 import com.utp.request.generated.model.ParkingRequestInformationList;
@@ -94,6 +95,22 @@ public class RequestApiImplements implements RequestApi {
     return authenticatedUserProvider.getAuthenticatedUserId()
         .flatMap(userId -> requestService.getParkingRequestById(userId, requestId))
         .map(ResponseEntity::ok);
+  }
+
+  @Override
+  public Mono<ResponseEntity<ParkingAuthorization>> getParkingAuthorization(
+      String requestID,
+      String requestDate,
+      String appCode,
+      String callerName,
+      String numberPlate,
+      ServerWebExchange exchange) {
+    return requestService.getParkingAuthorization(numberPlate)
+        .map(authorization -> {
+          log.info("Parking authorization resolved - NumberPlate: {}, result: {}",
+              authorization.getNumberPlate(), authorization.getResult());
+          return ResponseEntity.ok(authorization);
+        });
   }
 
   @Override

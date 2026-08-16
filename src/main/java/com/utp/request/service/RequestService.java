@@ -1,5 +1,6 @@
 package com.utp.request.service;
 
+import com.utp.request.generated.model.ParkingAuthorization;
 import com.utp.request.generated.model.ParkingRequestDetail;
 import com.utp.request.generated.model.ParkingRequestIn;
 import com.utp.request.generated.model.ParkingRequestInformationList;
@@ -17,4 +18,6 @@ public interface RequestService {
       Integer applicantId);
 
   Mono<ParkingRequestDetail> getParkingRequestById(Long authenticatedUserId, Integer requestId);
+
+  Mono<ParkingAuthorization> getParkingAuthorization(String numberPlate);
 }

@@ -4,6 +4,8 @@ import com.utp.request.client.portal.PortalServiceClient;
 import com.utp.request.generated.client.users.model.CycleResponse;
 import com.utp.request.generated.client.users.model.UserResponse;
 import com.utp.request.generated.model.ApplicantInformation;
+import com.utp.request.generated.model.ParkingAuthorization;
+import com.utp.request.generated.model.ParkingAuthorizationResult;
 import com.utp.request.generated.model.ParkingRequestDetail;
 import com.utp.request.generated.model.ParkingRequestIn;
 import com.utp.request.generated.model.ParkingRequestInformation;
@@ -39,6 +41,7 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -150,6 +153,69 @@ public class RequestServiceImpl implements RequestService {
         .switchIfEmpty(Mono.error(new NotFoundException(Constants.ERROR_REQUEST_NOT_FOUND)))
         .flatMap(request -> validateDetailAccess(authenticatedUserId, request)
             .then(Mono.defer(() -> buildDetail(request))));
+  }
+
+  @Override
+  public Mono<ParkingAuthorization> getParkingAuthorization(String numberPlate) {
+    String normalizedPlate = NumberPlateValidator.normalize(numberPlate);
+
+    return vehicleRepository.findByNumberPlate(normalizedPlate)
+        .flatMap(vehicle -> resolveAuthorization(normalizedPlate, vehicle))
+        .switchIfEmpty(Mono.fromSupplier(() -> {
+          log.info("Parking authorization requested for unknown plate - NumberPlate: {}",
+              normalizedPlate);
+          return rejectedAuthorization(normalizedPlate, null,
+              ParkingAuthorizationResult.VEHICLE_NOT_FOUND);
+        }));
+  }
+
+  private Mono<ParkingAuthorization> resolveAuthorization(String numberPlate, Vehicle vehicle) {
+    if (!Constants.ID_VEHICLE_STATUS_ASSIGNED.equals(vehicle.getIdVehicleStatus())) {
+      return Mono.just(rejectedAuthorization(numberPlate, vehicle,
+          ParkingAuthorizationResult.VEHICLE_UNASSIGNED));
+    }
+
+    return portalServiceClient.getCurrentCycle()
+        .flatMap(cycle -> requestRepository
+            .findByIdVehicleAndIdCycle(vehicle.getIdVehicle(), cycle.getIdCycle().intValue())
+            .filter(request -> Constants.ID_STATUS_APPROVED.equals(request.getIdStatus()))
+            .flatMap(request -> approvedAuthorization(numberPlate, vehicle, request, cycle))
+            .switchIfEmpty(Mono.fromSupplier(() -> rejectedAuthorization(numberPlate, vehicle,
+                ParkingAuthorizationResult.REQUEST_NOT_APPROVED))));
+  }
+
+  private Mono<ParkingAuthorization> approvedAuthorization(String numberPlate, Vehicle vehicle,
+                                                           Request request, CycleResponse cycle) {
+    Mono<VehicleType> vehicleTypeMono = vehicleTypeRepository.findById(vehicle.getIdVehicleType());
+    Mono<UserResponse> applicantMono = portalServiceClient
+        .getUserById(request.getIdApplicant().longValue())
+        .onErrorResume(error -> {
+          log.error("No se pudo obtener al solicitante {} desde business-core-portal: {}",
+              request.getIdApplicant(), error.getMessage());
+          return Mono.empty();
+        });
+
+    return Mono.zip(vehicleTypeMono.map(Optional::of).defaultIfEmpty(Optional.empty()),
+            applicantMono.map(Optional::of).defaultIfEmpty(Optional.empty()))
+        .map(tuple -> new ParkingAuthorization()
+            .authorized(true)
+            .result(ParkingAuthorizationResult.AUTHORIZED)
+            .idVehicle(vehicle.getIdVehicle())
+            .numberPlate(numberPlate)
+            .idRequest(request.getIdRequest())
+            .vehicle(parkingRequestInformationMapper
+                .toVehicleInformation(vehicle, tuple.getT1().orElse(null)))
+            .applicant(parkingRequestInformationMapper
+                .toApplicantInformation(tuple.getT2().orElse(null), cycle)));
+  }
+
+  private ParkingAuthorization rejectedAuthorization(String numberPlate, Vehicle vehicle,
+                                                     ParkingAuthorizationResult result) {
+    return new ParkingAuthorization()
+        .authorized(false)
+        .result(result)
+        .idVehicle(vehicle == null ? null : vehicle.getIdVehicle())
+        .numberPlate(numberPlate);
   }
 
   private Mono<Void> validateDetailAccess(Long authenticatedUserId, Request request) {
